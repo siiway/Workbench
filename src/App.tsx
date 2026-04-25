@@ -6,7 +6,6 @@ import {
   webDarkTheme,
   Spinner,
   makeStyles,
-  tokens,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
@@ -17,11 +16,14 @@ import { AuthProvider, useAuth } from "./auth";
 import { Sidebar } from "./components/Sidebar";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TasksPage } from "./pages/TasksPage";
+import { TeamsPage } from "./pages/TeamsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
 import type { TeamInfo } from "./types";
+
+const ACTIVE_TEAM_KEY = "workbench:activeTeamId";
 
 const useStyles = makeStyles({
   shell: {
@@ -74,14 +76,29 @@ function AppShell() {
   const styles = useStyles();
   const { user, loading, sessionExpired, login, dismissExpired } = useAuth();
   const { configured, markConfigured } = useInitStatus();
-  const [activeTeamId, setActiveTeamId] = useState<string>("");
+  const [activeTeamId, setActiveTeamIdState] = useState<string>(
+    () => localStorage.getItem(ACTIVE_TEAM_KEY) ?? "",
+  );
 
-  // Pick first team as default when user loads
+  const setActiveTeamId = (id: string) => {
+    setActiveTeamIdState(id);
+    if (id) localStorage.setItem(ACTIVE_TEAM_KEY, id);
+    else localStorage.removeItem(ACTIVE_TEAM_KEY);
+  };
+
+  // Reconcile active team against the user's actual teams.
+  // If the stored team isn't a current team, fall back to the first one.
   useEffect(() => {
-    if (user?.teams.length && !activeTeamId) {
-      setActiveTeamId(user.teams[0].id);
+    if (!user) return;
+    const teams = user.teams;
+    if (!teams.length) {
+      if (activeTeamId) setActiveTeamId("");
+      return;
     }
-  }, [user, activeTeamId]);
+    if (!activeTeamId || !teams.some((t) => t.id === activeTeamId)) {
+      setActiveTeamId(teams[0].id);
+    }
+  }, [user, activeTeamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading || configured === null) {
     return (
@@ -104,11 +121,7 @@ function AppShell() {
 
   return (
     <div className={styles.shell}>
-      <Sidebar
-        teams={teams}
-        activeTeamId={currentTeam}
-        onTeamChange={setActiveTeamId}
-      />
+      <Sidebar teams={teams} activeTeamId={currentTeam} />
       <div className={styles.main}>
         {sessionExpired && (
           <MessageBar intent="error">
@@ -126,18 +139,40 @@ function AppShell() {
           </MessageBar>
         )}
         <div className={styles.content}>
-          {currentTeam ? (
-            <Routes>
-              <Route path="/" element={<DashboardPage teamId={currentTeam} />} />
-              <Route path="/tasks" element={<TasksPage teamId={currentTeam} />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          ) : (
-            <div className={styles.center}>
-              <Spinner label="Loading teams…" />
-            </div>
-          )}
+          <Routes>
+            <Route
+              path="/"
+              element={
+                currentTeam ? (
+                  <DashboardPage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
+            <Route
+              path="/tasks"
+              element={
+                currentTeam ? (
+                  <TasksPage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
+            <Route
+              path="/teams"
+              element={
+                <TeamsPage
+                  teams={teams}
+                  activeTeamId={currentTeam}
+                  onTeamChange={setActiveTeamId}
+                />
+              }
+            />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
       </div>
     </div>

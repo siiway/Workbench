@@ -26,7 +26,6 @@ export type TeamOverview = {
 export type TodoSet = {
   id: string;
   name: string;
-  description: string | null;
   sortOrder: number;
   total: number;
   completed: number;

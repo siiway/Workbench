@@ -4,21 +4,26 @@ import {
   Title3,
   Caption1,
   Caption2,
+  Body2,
   Button,
   Avatar,
   Divider,
   Badge,
+  mergeClasses,
 } from "@fluentui/react-components";
 import {
   GridDots20Regular,
   SignOut20Regular,
   Settings20Regular,
+  Settings20Filled,
   Home20Regular,
   Home20Filled,
   CheckboxChecked20Regular,
   CheckboxChecked20Filled,
+  People20Regular,
+  People20Filled,
 } from "@fluentui/react-icons";
-import { useNavigate, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import type { TeamInfo, TeamRole } from "../types";
 import { useAuth } from "../auth";
 
@@ -38,7 +43,7 @@ const ROLE_COLOR: Record<TeamRole, "success" | "informative" | "warning" | "subt
 
 const useStyles = makeStyles({
   sidebar: {
-    width: "220px",
+    width: "240px",
     flexShrink: 0,
     display: "flex",
     flexDirection: "column",
@@ -53,45 +58,77 @@ const useStyles = makeStyles({
     gap: tokens.spacingHorizontalS,
     padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
   },
-  sectionLabel: {
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM} 2px`,
-    color: tokens.colorNeutralForeground3,
-    userSelect: "none",
+  nav: {
+    flex: 1,
+    overflowY: "auto",
+    padding: tokens.spacingVerticalS,
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
   },
-  item: {
+  navItem: {
     display: "flex",
     alignItems: "center",
     gap: tokens.spacingHorizontalS,
-    padding: `6px ${tokens.spacingHorizontalS}`,
-    margin: `0 ${tokens.spacingHorizontalXS}`,
+    padding: `8px ${tokens.spacingHorizontalM}`,
     borderRadius: tokens.borderRadiusMedium,
     cursor: "pointer",
     border: "none",
     background: "transparent",
     textAlign: "left",
-    width: "calc(100% - 8px)",
+    width: "100%",
+    color: tokens.colorNeutralForeground2,
+    textDecoration: "none",
+    fontSize: tokens.fontSizeBase300,
+    boxSizing: "border-box",
+    ":hover": {
+      backgroundColor: tokens.colorNeutralBackground3,
+      color: tokens.colorNeutralForeground1,
+    },
+  },
+  navItemActive: {
+    backgroundColor: tokens.colorNeutralBackground3,
     color: tokens.colorNeutralForeground1,
-    ":hover": { backgroundColor: tokens.colorNeutralBackground1Hover },
+    fontWeight: tokens.fontWeightSemibold,
+    ":hover": {
+      backgroundColor: tokens.colorNeutralBackground3Hover,
+    },
   },
-  itemActive: {
-    backgroundColor: tokens.colorNeutralBackground1Selected,
-    fontWeight: "600",
-  },
-  teamActive: {
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground1,
-  },
-  itemLabel: {
+  navItemLabel: {
+    flex: 1,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    flex: 1,
   },
-  footer: {
+  teamSummary: {
+    margin: `0 ${tokens.spacingHorizontalS}`,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground3,
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: "4px",
+  },
+  teamSummaryRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+    minWidth: 0,
+  },
+  teamSummaryName: {
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  teamEmpty: {
+    color: tokens.colorNeutralForeground3,
+  },
+  footer: {
     padding: tokens.spacingVerticalS,
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
   },
   userRow: {
     display: "flex",
@@ -116,82 +153,108 @@ const useStyles = makeStyles({
 type Props = {
   teams: TeamInfo[];
   activeTeamId: string;
-  onTeamChange: (id: string) => void;
 };
 
-export function Sidebar({ teams, activeTeamId, onTeamChange }: Props) {
+export function Sidebar({ teams, activeTeamId }: Props) {
   const styles = useStyles();
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
 
   const activeTeam = teams.find((t) => t.id === activeTeamId);
   const userRole = activeTeam?.role;
 
-  function navItem(
-    path: string,
-    label: string,
-    icon: React.ReactNode,
-    activeIcon: React.ReactNode,
-  ) {
-    const active = pathname === path;
+  function NavItem({
+    to,
+    end,
+    label,
+    icon,
+    activeIcon,
+  }: {
+    to: string;
+    end?: boolean;
+    label: string;
+    icon: React.ReactNode;
+    activeIcon: React.ReactNode;
+  }) {
     return (
-      <button
-        className={`${styles.item} ${active ? styles.itemActive : ""}`}
-        onClick={() => navigate(path)}
+      <NavLink
+        to={to}
+        end={end}
+        className={({ isActive }) =>
+          mergeClasses(styles.navItem, isActive && styles.navItemActive)
+        }
       >
-        {active ? activeIcon : icon}
-        <Caption1 className={styles.itemLabel}>{label}</Caption1>
-      </button>
+        {({ isActive }) => (
+          <>
+            {isActive ? activeIcon : icon}
+            <Caption1 className={styles.navItemLabel}>{label}</Caption1>
+          </>
+        )}
+      </NavLink>
     );
   }
 
   return (
     <div className={styles.sidebar}>
-      {/* App header */}
       <div className={styles.header}>
         <GridDots20Regular />
         <Title3>Workbench</Title3>
       </div>
       <Divider />
 
-      {/* Team switcher */}
-      <Caption2 className={styles.sectionLabel}>TEAMS</Caption2>
-      {teams.map((team) => (
-        <button
-          key={team.id}
-          className={`${styles.item} ${team.id === activeTeamId ? styles.teamActive : ""}`}
-          onClick={() => onTeamChange(team.id)}
-        >
-          <Avatar
-            name={team.name}
-            image={team.avatarUrl ? { src: team.avatarUrl } : undefined}
-            size={20}
-            shape="square"
-          />
-          <Caption1 className={styles.itemLabel}>{team.name}</Caption1>
-        </button>
-      ))}
+      <nav className={styles.nav}>
+        <NavItem to="/" end label="Overview" icon={<Home20Regular />} activeIcon={<Home20Filled />} />
+        <NavItem to="/tasks" label="Tasks" icon={<CheckboxChecked20Regular />} activeIcon={<CheckboxChecked20Filled />} />
+        <NavItem
+          to="/teams"
+          label="Teams"
+          icon={<People20Regular />}
+          activeIcon={<People20Filled />}
+        />
+        <NavItem
+          to="/settings"
+          label="Settings"
+          icon={<Settings20Regular />}
+          activeIcon={<Settings20Filled />}
+        />
+      </nav>
 
-      <Divider style={{ margin: `${tokens.spacingVerticalS} 0` }} />
-
-      {/* Navigation */}
-      <Caption2 className={styles.sectionLabel}>NAVIGATE</Caption2>
-      {navItem("/", "Overview", <Home20Regular />, <Home20Filled />)}
-      {navItem("/tasks", "Tasks", <CheckboxChecked20Regular />, <CheckboxChecked20Filled />)}
-
-      <div style={{ flex: 1 }} />
       <Divider />
 
-      {/* Bottom: settings + user */}
       <div className={styles.footer}>
-        <button
-          className={`${styles.item} ${pathname === "/settings" ? styles.itemActive : ""}`}
-          onClick={() => navigate(pathname === "/settings" ? "/" : "/settings")}
-        >
-          <Settings20Regular />
-          <Caption1 className={styles.itemLabel}>Settings</Caption1>
-        </button>
+        <Caption2 style={{ color: tokens.colorNeutralForeground3, padding: `0 ${tokens.spacingHorizontalM}` }}>
+          ACTIVE TEAM
+        </Caption2>
+        <div className={styles.teamSummary}>
+          {activeTeam ? (
+            <>
+              <div className={styles.teamSummaryRow}>
+                <Avatar
+                  name={activeTeam.name}
+                  image={activeTeam.avatarUrl ? { src: activeTeam.avatarUrl } : undefined}
+                  size={20}
+                  shape="square"
+                />
+                <Body2 className={styles.teamSummaryName}>{activeTeam.name}</Body2>
+              </div>
+              {userRole && (
+                <Badge
+                  appearance="tint"
+                  color={ROLE_COLOR[userRole]}
+                  size="small"
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  {ROLE_LABEL[userRole]}
+                </Badge>
+              )}
+            </>
+          ) : (
+            <Caption1 className={styles.teamEmpty}>
+              {teams.length === 0 ? "No teams" : "No team selected"}
+            </Caption1>
+          )}
+        </div>
+
+        <Divider />
 
         <div className={styles.userRow}>
           <Avatar
@@ -203,15 +266,10 @@ export function Sidebar({ teams, activeTeamId, onTeamChange }: Props) {
             <Caption1 className={styles.userName}>
               {user?.displayName || user?.username}
             </Caption1>
-            {userRole && (
-              <Badge
-                appearance="tint"
-                color={ROLE_COLOR[userRole]}
-                size="small"
-                style={{ alignSelf: "flex-start" }}
-              >
-                {ROLE_LABEL[userRole]}
-              </Badge>
+            {user?.username && user?.displayName && (
+              <Caption1 style={{ color: tokens.colorNeutralForeground3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                @{user.username}
+              </Caption1>
             )}
           </div>
           <Button

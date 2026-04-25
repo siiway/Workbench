@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../auth";
 import {
   Title2,
   Subtitle2,
@@ -21,7 +22,7 @@ import {
   ChevronRight20Regular,
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
-import type { TodoSet, MyTodo } from "../types";
+import type { TodoSet } from "../types";
 
 const useStyles = makeStyles({
   root: {
@@ -118,13 +119,21 @@ const useStyles = makeStyles({
   },
 });
 
-type Todo = MyTodo & { parentId?: string | null };
+type Todo = {
+  id: string;
+  parentId: string | null;
+  title: string;
+  completed: boolean;
+  claimedBy: string | null;
+  isClaimedByMe: boolean;
+};
 
 type Props = { teamId: string };
 
 export function TasksPage({ teamId }: Props) {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [sets, setSets] = useState<TodoSet[]>([]);
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
@@ -138,15 +147,25 @@ export function TasksPage({ teamId }: Props) {
     setGlintError(null);
     try {
       const res = await fetch(`/api/glint/workbench/teams/${teamId}/sets`);
-      if (res.status === 503) {
-        const d: { error?: string } = await res.json();
-        setGlintError(d.error ?? "Glint is not configured for this team.");
+      const text = await res.text();
+      let parsed: { sets?: TodoSet[]; error?: string } = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch {
+        setGlintError(`Unexpected response (${res.status}): ${text.slice(0, 500)}`);
         return;
       }
-      const data: { sets: TodoSet[] } = await res.json();
-      setSets(data.sets ?? []);
-      if (data.sets?.length && !activeSetId) {
-        setActiveSetId(data.sets[0].id);
+      if (res.status === 503) {
+        setGlintError(parsed.error ?? "Glint is not configured for this team.");
+        return;
+      }
+      if (!res.ok) {
+        setGlintError(parsed.error ?? `Error ${res.status}: ${text.slice(0, 500)}`);
+        return;
+      }
+      setSets(parsed.sets ?? []);
+      if (parsed.sets?.length && !activeSetId) {
+        setActiveSetId(parsed.sets[0].id);
       }
     } catch (e) {
       setGlintError(e instanceof Error ? e.message : "Network error");
@@ -163,32 +182,49 @@ export function TasksPage({ teamId }: Props) {
     if (!activeSetId) return;
     setTodosLoading(true);
     setTodosError(null);
-    fetch(`/api/glint/teams/${teamId}/sets/${activeSetId}/todos`)
+    type ApiTodo = {
+      id: string;
+      parentId: string | null;
+      title: string;
+      completed: boolean;
+      claimedBy: string | null;
+    };
+    fetch(`/api/glint/workbench/teams/${teamId}/sets/${activeSetId}/todos`)
       .then(async (r) => {
         const text = await r.text();
-        let parsed: { todos?: Todo[]; error?: string };
+        let parsed: { todos?: ApiTodo[]; error?: string };
         try {
           parsed = JSON.parse(text);
         } catch {
-          setTodosError(`Unexpected response (${r.status}): ${text.slice(0, 120)}`);
+          setTodosError(`Unexpected response (${r.status}): ${text.slice(0, 500)}`);
           return;
         }
         if (!r.ok) {
-          setTodosError(parsed.error ?? `Error ${r.status}`);
+          setTodosError(parsed.error ?? `Error ${r.status}: ${text.slice(0, 500)}`);
           return;
         }
-        setTodos(parsed.todos ?? []);
+        const myId = user?.id ?? null;
+        setTodos(
+          (parsed.todos ?? []).map((t) => ({
+            id: t.id,
+            parentId: t.parentId,
+            title: t.title,
+            completed: t.completed,
+            claimedBy: t.claimedBy,
+            isClaimedByMe: !!myId && t.claimedBy === myId,
+          })),
+        );
       })
       .catch((e: unknown) => setTodosError(e instanceof Error ? e.message : "Network error"))
       .finally(() => setTodosLoading(false));
-  }, [teamId, activeSetId]);
+  }, [teamId, activeSetId, user?.id]);
 
   async function toggleTodo(todo: Todo) {
     const optimistic = todos.map((t) =>
       t.id === todo.id ? { ...t, completed: !t.completed } : t,
     );
     setTodos(optimistic);
-    await fetch(`/api/glint/teams/${teamId}/todos/${todo.id}`, {
+    await fetch(`/api/glint/workbench/teams/${teamId}/todos/${todo.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed: !todo.completed }),

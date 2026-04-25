@@ -61,11 +61,31 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     return c.json({ error: `Glint unreachable: ${e instanceof Error ? e.message : String(e)}` }, 502);
   }
   const body = await upstream.text();
+  const upstreamCT = upstream.headers.get("Content-Type") ?? "";
+
+  console.log(
+    `[glint-proxy] ${c.req.method} ${targetUrl} -> ${upstream.status} ${upstreamCT} body=${body.slice(0, 300)}`,
+  );
+
+  // If upstream returned a non-JSON error (e.g. plain text "Internal Server Error"),
+  // wrap it in a JSON envelope so the frontend can display the body, status, and target.
+  if (!upstreamCT.includes("application/json") && upstream.status >= 400) {
+    return c.json(
+      {
+        error: `Upstream ${upstream.status}`,
+        upstreamStatus: upstream.status,
+        upstreamContentType: upstreamCT || null,
+        upstreamBody: body,
+        target: targetUrl,
+      },
+      upstream.status as never,
+    );
+  }
 
   return new Response(body, {
     status: upstream.status,
     headers: {
-      "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
+      "Content-Type": upstreamCT || "application/json",
     },
   });
 });
