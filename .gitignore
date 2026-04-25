@@ -14,6 +14,7 @@ build/
 # Ignore IDE/editor-specific files
 vscode/
 idea/
+.idea/
 *.iml
 # Ignore OS-specific files
 DS_Store
@@ -21,6 +22,25 @@ Thumbs.db
 # Ignore environment files
 env
 env.local
+.env
+.env.local
+.env.bff
 # Ignore Yarn and npm lock files (optional, depending on your workflow)
 yarn.lock
 package-lock.json
+
+# Ignore TypeScript incremental metadata
+*.tsbuildinfo
+
+# Cloudflare / Wrangler
+.wrangler/
+
+# Local dev environment variables (keep example)
+.dev.vars
+.dev.vars.local
+.env*
+!.env.example
+
+# Claude Code local settings
+.claude/
+

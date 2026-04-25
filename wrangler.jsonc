@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "workbench",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-04-25",
+  "assets": {
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [
+    {
+      // Replace with your KV namespace ID after running: wrangler kv namespace create workbench-kv
+      "binding": "KV",
+      "id": "REPLACE_WITH_YOUR_KV_ID"
+    }
+  ],
+  // Optional: set these to skip the web-based init flow.
+  // Sensitive values (CLIENT_SECRET) should be set via: wrangler secret put PRISM_CLIENT_SECRET
+  // "vars": {
+  //   "PRISM_BASE_URL": "https://your-prism-instance.example.com",
+  //   "PRISM_CLIENT_ID": "your-client-id",
+  //   "PRISM_REDIRECT_URI": "https://workbench.example.com/callback",
+  //   "GLINT_BASE_URL": "https://your-glint-instance.example.com"
+  // },
+  "routes": [
+    {
+      "pattern": "workbench.siiway.org",
+      "custom_domain": true
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Copy this file to .dev.vars for local development.
+# These override the KV-stored config so you don't need to go through the init page.
+
+PRISM_BASE_URL=https://your-prism-instance.example.com
+PRISM_CLIENT_ID=your-client-id
+# PRISM_CLIENT_SECRET=  # leave blank to use PKCE
+PRISM_REDIRECT_URI=http://localhost:5173/callback
+
+# Default Glint instance (can be overridden per-team in Settings)
+GLINT_BASE_URL=http://localhost:5174
