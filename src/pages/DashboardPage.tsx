@@ -1,84 +1,129 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Title2,
-  Subtitle2,
+  Badge,
   Body2,
-  Caption1,
+  Button,
   Card,
   CardHeader,
+  Caption1,
   Spinner,
-  Badge,
-  Button,
-  Divider,
-  Link,
+  Text,
+  Title2,
+  Title3,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
 import {
-  CheckmarkCircle20Regular,
-  Circle20Regular,
-  ArrowClockwise20Regular,
-  ArrowRight20Regular,
-  Settings20Regular,
+  AppsRegular,
+  ArrowClockwiseRegular,
+  CheckmarkCircleRegular,
+  CircleRegular,
+  ClipboardTaskListLtrRegular,
+  PersonCircleRegular,
+  HistoryRegular,
+  SettingsRegular,
+  ArrowRightRegular,
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
 import type { TeamOverview, MyTodo, FeedItem } from "../types";
+import { useI18n } from "../i18n";
 
 const useStyles = makeStyles({
   root: {
-    padding: tokens.spacingVerticalL,
+    padding: "32px",
+    maxWidth: "1080px",
+    width: "100%",
+    margin: "0 auto",
+    boxSizing: "border-box",
+    height: "100%",
+    overflowY: "auto",
+  },
+  welcome: {
     display: "flex",
     flexDirection: "column",
-    gap: tokens.spacingVerticalL,
-    overflowY: "auto",
-    height: "100%",
+    gap: "4px",
+    marginBottom: "8px",
   },
-  statsRow: {
+  headerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexWrap: "wrap",
+  },
+  configBanner: {
+    padding: "16px",
+    borderRadius: "8px",
+    background: tokens.colorNeutralBackground3,
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "16px",
+    marginTop: "24px",
+    flexWrap: "wrap",
+  },
+  grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-    gap: tokens.spacingVerticalM,
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: "16px",
+    marginTop: "24px",
   },
   statCard: {
     display: "flex",
     flexDirection: "column",
     gap: "4px",
-    padding: tokens.spacingVerticalM,
+    transition: "box-shadow 0.15s",
+    ":hover": { boxShadow: tokens.shadow8 },
   },
-  statValue: {
-    fontSize: "28px",
-    fontWeight: "700",
-    lineHeight: "1",
-  },
-  grid: {
+  twoCol: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: tokens.spacingVerticalL,
+    gap: "16px",
+    marginTop: "24px",
+    "@media (max-width: 900px)": {
+      gridTemplateColumns: "1fr",
+    },
   },
-  section: {
+  listCard: {
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: "0",
+  },
+  listBody: {
+    padding: "0 16px 16px",
+    display: "flex",
+    flexDirection: "column",
   },
   row: {
     display: "flex",
     alignItems: "flex-start",
-    gap: tokens.spacingHorizontalS,
-    padding: `6px 0`,
+    gap: "10px",
+    padding: "10px 0",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    ":last-child": { borderBottom: "none" },
   },
-  rowText: { flex: 1 },
+  rowText: { flex: 1, minWidth: 0 },
+  rowMeta: {
+    display: "block",
+    color: tokens.colorNeutralForeground3,
+    marginTop: "2px",
+  },
   empty: {
     color: tokens.colorNeutralForeground3,
-    padding: `${tokens.spacingVerticalM} 0`,
+    padding: "16px 0",
     textAlign: "center",
   },
-  configBanner: {
+  cardFooter: {
+    padding: "8px 16px 12px",
     display: "flex",
+    justifyContent: "flex-end",
+  },
+  loadingShell: {
+    display: "flex",
+    height: "100%",
     alignItems: "center",
-    gap: tokens.spacingHorizontalM,
-    padding: tokens.spacingVerticalM,
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground3,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    justifyContent: "center",
   },
 });
 
@@ -87,6 +132,7 @@ type Props = { teamId: string };
 export function DashboardPage({ teamId }: Props) {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [overview, setOverview] = useState<TeamOverview | null>(null);
   const [myTodos, setMyTodos] = useState<MyTodo[]>([]);
@@ -103,11 +149,9 @@ export function DashboardPage({ teamId }: Props) {
         fetch(`/api/glint/workbench/teams/${teamId}/my-todos`),
         fetch(`/api/glint/workbench/teams/${teamId}/feed`),
       ]);
-
       const [ovText, mtText, fdText] = await Promise.all([
         ovRes.text(), mtRes.text(), fdRes.text(),
       ]);
-
       function safeParse<T>(text: string, status: number): T {
         try {
           return JSON.parse(text) as T;
@@ -115,16 +159,13 @@ export function DashboardPage({ teamId }: Props) {
           throw new Error(`Unexpected response (${status}): ${text.slice(0, 120)}`);
         }
       }
-
       const ov = safeParse<TeamOverview & { error?: string }>(ovText, ovRes.status);
       if (ovRes.status === 503 || !ovRes.ok) {
-        setGlintError(ov.error ?? "Glint is not configured for this team.");
+        setGlintError(ov.error ?? t.glintNotConfigured);
         return;
       }
-
       const mt = safeParse<{ todos: MyTodo[]; error?: string }>(mtText, mtRes.status);
       const fd = safeParse<{ items: FeedItem[]; error?: string }>(fdText, fdRes.status);
-
       setOverview(ov as TeamOverview);
       setMyTodos((mt.todos ?? []).slice(0, 5));
       setFeed((fd.items ?? []).slice(0, 8));
@@ -139,138 +180,229 @@ export function DashboardPage({ teamId }: Props) {
 
   if (loading) {
     return (
-      <div className={styles.root} style={{ alignItems: "center", justifyContent: "center" }}>
-        <Spinner size="large" label="Loading…" />
+      <div className={styles.loadingShell}>
+        <Spinner size="large" label={t.loading} />
       </div>
     );
   }
 
   return (
     <div className={styles.root}>
-      <Title2>Overview</Title2>
+      <div className={styles.headerRow}>
+        <div className={styles.welcome}>
+          <Title2>{t.overviewTitle}</Title2>
+          <Text style={{ color: tokens.colorNeutralForeground3 }}>
+            {t.overviewSubtitle}
+          </Text>
+        </div>
+        <Button
+          appearance="subtle"
+          icon={<ArrowClockwiseRegular />}
+          onClick={() => void load()}
+        >
+          {t.refresh}
+        </Button>
+      </div>
 
-      {/* Glint not configured banner */}
       {glintError && (
         <div className={styles.configBanner}>
-          <Body2 style={{ flex: 1, color: tokens.colorNeutralForeground2 }}>
-            {glintError}
-          </Body2>
+          <div>
+            <Text weight="semibold" block>
+              {t.glintNotConfiguredTitle}
+            </Text>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              {glintError}
+            </Text>
+          </div>
           <Button
-            icon={<Settings20Regular />}
-            appearance="subtle"
+            appearance="primary"
+            size="small"
+            icon={<SettingsRegular />}
             onClick={() => navigate("/settings")}
           >
-            Configure
-          </Button>
-          <Button
-            icon={<ArrowClockwise20Regular />}
-            appearance="subtle"
-            onClick={() => void load()}
-          >
-            Retry
+            {t.configure}
           </Button>
         </div>
       )}
 
-      {/* Stats */}
-      {overview && (
-        <div className={styles.statsRow}>
-          <StatCard label="Total tasks" value={overview.total} />
-          <StatCard label="Completed" value={overview.completed} color={tokens.colorPaletteGreenForeground1} />
-          <StatCard label="Pending" value={overview.pending} />
-          <StatCard label="My claims" value={overview.claimedByMe} color={tokens.colorBrandForeground1} />
-          <StatCard label="Sets" value={overview.sets} />
-        </div>
-      )}
+      {overview && !glintError && (
+        <>
+          <div className={styles.grid}>
+            <Card className={styles.statCard}>
+              <CardHeader
+                image={
+                  <ClipboardTaskListLtrRegular
+                    fontSize={24}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={<Text weight="semibold">{t.statPending}</Text>}
+              />
+              <div style={{ padding: "0 16px 16px" }}>
+                <Title3>{overview.pending}</Title3>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {t.statPendingDesc}
+                </Text>
+              </div>
+            </Card>
 
-      {!glintError && (
-        <div className={styles.grid}>
-          {/* My Tasks */}
-          <Card>
-            <CardHeader
-              header={
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                  <Subtitle2>My Tasks</Subtitle2>
-                  <Badge appearance="tint" color="brand">{myTodos.length}</Badge>
-                </div>
-              }
-            />
-            <div className={styles.section}>
-              {myTodos.length === 0 ? (
-                <Caption1 className={styles.empty}>No tasks assigned to you.</Caption1>
-              ) : (
-                myTodos.map((todo) => (
-                  <div key={todo.id}>
-                    <div className={styles.row}>
+            <Card className={styles.statCard}>
+              <CardHeader
+                image={
+                  <CheckmarkCircleRegular
+                    fontSize={24}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={<Text weight="semibold">{t.statCompleted}</Text>}
+              />
+              <div style={{ padding: "0 16px 16px" }}>
+                <Title3>
+                  {overview.completed}
+                  <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+                    /{overview.total}
+                  </Text>
+                </Title3>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {t.statCompletedDesc}
+                </Text>
+              </div>
+            </Card>
+
+            <Card className={styles.statCard}>
+              <CardHeader
+                image={
+                  <PersonCircleRegular
+                    fontSize={24}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={<Text weight="semibold">{t.statMyClaims}</Text>}
+              />
+              <div style={{ padding: "0 16px 16px" }}>
+                <Title3>{overview.claimedByMe}</Title3>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {t.statMyClaimsDesc}
+                </Text>
+              </div>
+            </Card>
+
+            <Card className={styles.statCard}>
+              <CardHeader
+                image={
+                  <AppsRegular
+                    fontSize={24}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={<Text weight="semibold">{t.statSets}</Text>}
+              />
+              <div style={{ padding: "0 16px 16px" }}>
+                <Title3>{overview.sets}</Title3>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {t.statSetsDesc}
+                </Text>
+              </div>
+            </Card>
+          </div>
+
+          <div className={styles.twoCol}>
+            <Card className={styles.listCard}>
+              <CardHeader
+                image={
+                  <ClipboardTaskListLtrRegular
+                    fontSize={20}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text weight="semibold">{t.myTasks}</Text>
+                    <Badge appearance="tint" color="brand" size="small">
+                      {myTodos.length}
+                    </Badge>
+                  </div>
+                }
+              />
+              <div className={styles.listBody}>
+                {myTodos.length === 0 ? (
+                  <Caption1 className={styles.empty}>
+                    {t.emptyMyTasks}
+                  </Caption1>
+                ) : (
+                  myTodos.map((todo) => (
+                    <div key={todo.id} className={styles.row}>
                       {todo.completed
-                        ? <CheckmarkCircle20Regular color={tokens.colorPaletteGreenForeground1} />
-                        : <Circle20Regular color={tokens.colorNeutralForeground3} />}
+                        ? <CheckmarkCircleRegular fontSize={20} color={tokens.colorPaletteGreenForeground1} />
+                        : <CircleRegular fontSize={20} color={tokens.colorNeutralForeground3} />}
                       <div className={styles.rowText}>
                         <Body2>{todo.title}</Body2>
                         {todo.setName && (
-                          <Caption1 style={{ color: tokens.colorNeutralForeground3, display: "block" }}>
-                            {todo.setName}
-                          </Caption1>
+                          <Caption1 className={styles.rowMeta}>{todo.setName}</Caption1>
                         )}
                       </div>
                       {todo.isClaimedByMe && (
-                        <Badge appearance="tint" color="informative" size="small">Claimed</Badge>
+                        <Badge appearance="tint" color="informative" size="small">
+                          {t.claimedShort}
+                        </Badge>
                       )}
                     </div>
-                    <Divider />
-                  </div>
-                ))
-              )}
-            </div>
-            <Link onClick={() => navigate("/tasks")} style={{ display: "flex", alignItems: "center", gap: "4px", paddingTop: tokens.spacingVerticalS }}>
-              View all tasks <ArrowRight20Regular />
-            </Link>
-          </Card>
+                  ))
+                )}
+              </div>
+              <div className={styles.cardFooter}>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  icon={<ArrowRightRegular />}
+                  iconPosition="after"
+                  onClick={() => navigate("/tasks")}
+                >
+                  {t.viewAllTasks}
+                </Button>
+              </div>
+            </Card>
 
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader header={<Subtitle2>Recent Activity</Subtitle2>} />
-            <div className={styles.section}>
-              {feed.length === 0 ? (
-                <Caption1 className={styles.empty}>No recent activity.</Caption1>
-              ) : (
-                feed.map((item) => (
-                  <div key={item.id}>
-                    <div className={styles.row}>
+            <Card className={styles.listCard}>
+              <CardHeader
+                image={
+                  <HistoryRegular
+                    fontSize={20}
+                    color={tokens.colorBrandForeground1}
+                  />
+                }
+                header={
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text weight="semibold">{t.recentActivity}</Text>
+                    <Badge appearance="tint" color="brand" size="small">
+                      {feed.length}
+                    </Badge>
+                  </div>
+                }
+              />
+              <div className={styles.listBody}>
+                {feed.length === 0 ? (
+                  <Caption1 className={styles.empty}>{t.emptyActivity}</Caption1>
+                ) : (
+                  feed.map((item) => (
+                    <div key={item.id} className={styles.row}>
                       {item.completed
-                        ? <CheckmarkCircle20Regular color={tokens.colorPaletteGreenForeground1} />
-                        : <Circle20Regular color={tokens.colorNeutralForeground3} />}
+                        ? <CheckmarkCircleRegular fontSize={20} color={tokens.colorPaletteGreenForeground1} />
+                        : <CircleRegular fontSize={20} color={tokens.colorNeutralForeground3} />}
                       <div className={styles.rowText}>
                         <Body2>{item.title}</Body2>
                         {item.setName && (
-                          <Caption1 style={{ color: tokens.colorNeutralForeground3, display: "block" }}>
-                            {item.setName}
-                          </Caption1>
+                          <Caption1 className={styles.rowMeta}>{item.setName}</Caption1>
                         )}
                       </div>
                     </div>
-                    <Divider />
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
+        </>
       )}
     </div>
-  );
-}
-
-function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
-  const styles = useStyles();
-  return (
-    <Card>
-      <div className={styles.statCard}>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>{label}</Caption1>
-        <div className={styles.statValue} style={{ color: color ?? tokens.colorNeutralForeground1 }}>
-          {value}
-        </div>
-      </div>
-    </Card>
   );
 }

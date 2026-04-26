@@ -1,67 +1,61 @@
+// App shell sidebar — modeled on Prism's Layout pattern.
+
 import {
+  Avatar,
+  Badge,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  Text,
   makeStyles,
   tokens,
-  Title3,
-  Caption1,
-  Caption2,
-  Body2,
-  Button,
-  Avatar,
-  Divider,
-  Badge,
-  mergeClasses,
 } from "@fluentui/react-components";
 import {
-  GridDots20Regular,
-  SignOut20Regular,
-  Settings20Regular,
-  Settings20Filled,
-  Home20Regular,
-  Home20Filled,
-  CheckboxChecked20Regular,
-  CheckboxChecked20Filled,
-  People20Regular,
-  People20Filled,
+  CheckmarkCircleRegular,
+  HomeRegular,
+  PeopleRegular,
+  SettingsRegular,
+  SignOutRegular,
+  ShieldRegular,
+  GlobeRegular,
 } from "@fluentui/react-icons";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import type { TeamInfo, TeamRole } from "../types";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 
-const ROLE_LABEL: Record<TeamRole, string> = {
-  owner: "Owner",
-  "co-owner": "Co-owner",
-  admin: "Admin",
-  member: "Member",
-};
-
-const ROLE_COLOR: Record<TeamRole, "success" | "informative" | "warning" | "subtle"> = {
+const ROLE_COLORS: Record<TeamRole, "brand" | "success" | "informative" | "subtle"> = {
   owner: "success",
-  "co-owner": "warning",
-  admin: "warning",
+  "co-owner": "informative",
+  admin: "informative",
   member: "subtle",
 };
 
 const useStyles = makeStyles({
   sidebar: {
     width: "240px",
-    flexShrink: 0,
     display: "flex",
     flexDirection: "column",
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground2,
+    borderRight: `1px solid ${tokens.colorNeutralStroke1}`,
+    background: tokens.colorNeutralBackground2,
+    flexShrink: 0,
     height: "100%",
-    overflow: "hidden",
   },
-  header: {
+  logo: {
+    padding: "20px 16px",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
     display: "flex",
     alignItems: "center",
-    gap: tokens.spacingHorizontalS,
-    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
+    gap: "10px",
   },
   nav: {
     flex: 1,
     overflowY: "auto",
-    padding: tokens.spacingVerticalS,
+    padding: "8px",
     display: "flex",
     flexDirection: "column",
     gap: "2px",
@@ -69,84 +63,45 @@ const useStyles = makeStyles({
   navItem: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.spacingHorizontalS,
-    padding: `8px ${tokens.spacingHorizontalM}`,
-    borderRadius: tokens.borderRadiusMedium,
-    cursor: "pointer",
-    border: "none",
-    background: "transparent",
-    textAlign: "left",
-    width: "100%",
-    color: tokens.colorNeutralForeground2,
+    gap: "10px",
+    padding: "8px 12px",
+    borderRadius: "4px",
     textDecoration: "none",
+    color: tokens.colorNeutralForeground2,
     fontSize: tokens.fontSizeBase300,
-    boxSizing: "border-box",
     ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3,
+      background: tokens.colorNeutralBackground3,
       color: tokens.colorNeutralForeground1,
     },
   },
   navItemActive: {
-    backgroundColor: tokens.colorNeutralBackground3,
+    background: tokens.colorNeutralBackground3,
     color: tokens.colorNeutralForeground1,
     fontWeight: tokens.fontWeightSemibold,
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3Hover,
-    },
+    ":hover": { background: tokens.colorNeutralBackground3Hover },
   },
-  navItemLabel: {
-    flex: 1,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  teamSummary: {
-    margin: `0 ${tokens.spacingHorizontalS}`,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground3,
+  teamArea: {
+    padding: "12px",
+    borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: "8px",
   },
-  teamSummaryRow: {
+  teamRow: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.spacingHorizontalS,
+    gap: "8px",
     minWidth: 0,
   },
-  teamSummaryName: {
+  teamName: {
     flex: 1,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  teamEmpty: {
-    color: tokens.colorNeutralForeground3,
-  },
-  footer: {
-    padding: tokens.spacingVerticalS,
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalS,
-  },
-  userRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalS,
-    padding: `6px ${tokens.spacingHorizontalS}`,
-  },
-  userInfo: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    gap: "2px",
-  },
-  userName: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+  userArea: {
+    padding: "12px",
+    borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
   },
 });
 
@@ -155,132 +110,149 @@ type Props = {
   activeTeamId: string;
 };
 
+interface NavItemProps {
+  to: string;
+  end?: boolean;
+  icon: React.ReactElement;
+  label: string;
+}
+
+function NavItem({ to, end, icon, label }: NavItemProps) {
+  const styles = useStyles();
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `${styles.navItem}${isActive ? ` ${styles.navItemActive}` : ""}`
+      }
+    >
+      {icon}
+      {label}
+    </NavLink>
+  );
+}
+
 export function Sidebar({ teams, activeTeamId }: Props) {
   const styles = useStyles();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { t, locale, setLocale } = useI18n();
 
   const activeTeam = teams.find((t) => t.id === activeTeamId);
-  const userRole = activeTeam?.role;
-
-  function NavItem({
-    to,
-    end,
-    label,
-    icon,
-    activeIcon,
-  }: {
-    to: string;
-    end?: boolean;
-    label: string;
-    icon: React.ReactNode;
-    activeIcon: React.ReactNode;
-  }) {
-    return (
-      <NavLink
-        to={to}
-        end={end}
-        className={({ isActive }) =>
-          mergeClasses(styles.navItem, isActive && styles.navItemActive)
-        }
-      >
-        {({ isActive }) => (
-          <>
-            {isActive ? activeIcon : icon}
-            <Caption1 className={styles.navItemLabel}>{label}</Caption1>
-          </>
-        )}
-      </NavLink>
-    );
-  }
 
   return (
-    <div className={styles.sidebar}>
-      <div className={styles.header}>
-        <GridDots20Regular />
-        <Title3>Workbench</Title3>
+    <aside className={styles.sidebar}>
+      <div className={styles.logo}>
+        <Text weight="semibold" size={400}>
+          {t.appName}
+        </Text>
       </div>
-      <Divider />
 
       <nav className={styles.nav}>
-        <NavItem to="/" end label="Overview" icon={<Home20Regular />} activeIcon={<Home20Filled />} />
-        <NavItem to="/tasks" label="Tasks" icon={<CheckboxChecked20Regular />} activeIcon={<CheckboxChecked20Filled />} />
-        <NavItem
-          to="/teams"
-          label="Teams"
-          icon={<People20Regular />}
-          activeIcon={<People20Filled />}
-        />
-        <NavItem
-          to="/settings"
-          label="Settings"
-          icon={<Settings20Regular />}
-          activeIcon={<Settings20Filled />}
-        />
+        <NavItem to="/" end icon={<HomeRegular />} label={t.navOverview} />
+        <NavItem to="/tasks" icon={<CheckmarkCircleRegular />} label={t.navTasks} />
+        <NavItem to="/permissions" icon={<ShieldRegular />} label={t.navPermissions} />
       </nav>
 
-      <Divider />
-
-      <div className={styles.footer}>
-        <Caption2 style={{ color: tokens.colorNeutralForeground3, padding: `0 ${tokens.spacingHorizontalM}` }}>
-          ACTIVE TEAM
-        </Caption2>
-        <div className={styles.teamSummary}>
-          {activeTeam ? (
-            <>
-              <div className={styles.teamSummaryRow}>
-                <Avatar
-                  name={activeTeam.name}
-                  image={activeTeam.avatarUrl ? { src: activeTeam.avatarUrl } : undefined}
-                  size={20}
-                  shape="square"
-                />
-                <Body2 className={styles.teamSummaryName}>{activeTeam.name}</Body2>
-              </div>
-              {userRole && (
-                <Badge
-                  appearance="tint"
-                  color={ROLE_COLOR[userRole]}
-                  size="small"
-                  style={{ alignSelf: "flex-start" }}
-                >
-                  {ROLE_LABEL[userRole]}
-                </Badge>
-              )}
-            </>
-          ) : (
-            <Caption1 className={styles.teamEmpty}>
-              {teams.length === 0 ? "No teams" : "No team selected"}
-            </Caption1>
-          )}
-        </div>
-
-        <Divider />
-
-        <div className={styles.userRow}>
-          <Avatar
-            name={user?.displayName || user?.username}
-            image={user?.avatarUrl ? { src: user.avatarUrl } : undefined}
-            size={28}
-          />
-          <div className={styles.userInfo}>
-            <Caption1 className={styles.userName}>
-              {user?.displayName || user?.username}
-            </Caption1>
-            {user?.username && user?.displayName && (
-              <Caption1 style={{ color: tokens.colorNeutralForeground3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                @{user.username}
-              </Caption1>
-            )}
+      {activeTeam && (
+        <div className={styles.teamArea}>
+          <Text
+            size={200}
+            style={{
+              color: tokens.colorNeutralForeground3,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              fontWeight: tokens.fontWeightSemibold,
+            }}
+          >
+            {t.activeTeam}
+          </Text>
+          <div className={styles.teamRow}>
+            <Avatar
+              name={activeTeam.name}
+              image={activeTeam.avatarUrl ? { src: activeTeam.avatarUrl } : undefined}
+              size={24}
+              shape="square"
+            />
+            <Text className={styles.teamName} size={300} weight="semibold">
+              {activeTeam.name}
+            </Text>
           </div>
-          <Button
-            appearance="subtle"
-            icon={<SignOut20Regular />}
+          <Badge
+            appearance="filled"
             size="small"
-            title="Sign out"
-            onClick={() => void logout()}
-          />
+            color={ROLE_COLORS[activeTeam.role]}
+            style={{ alignSelf: "flex-start" }}
+          >
+            {activeTeam.role}
+          </Badge>
         </div>
+      )}
+
+      <div className={styles.userArea}>
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <MenuButton
+              appearance="subtle"
+              style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}
+              icon={
+                <Avatar
+                  name={user?.displayName || user?.username}
+                  image={user?.avatarUrl ? { src: user.avatarUrl } : undefined}
+                  size={28}
+                />
+              }
+            >
+              <div style={{ textAlign: "left", overflow: "hidden" }}>
+                <Text
+                  block
+                  size={200}
+                  weight="semibold"
+                  truncate
+                  style={{ maxWidth: 140 }}
+                >
+                  {user?.displayName || user?.username}
+                </Text>
+                <Text
+                  block
+                  size={100}
+                  truncate
+                  style={{ color: tokens.colorNeutralForeground3, maxWidth: 140 }}
+                >
+                  @{user?.username}
+                </Text>
+              </div>
+            </MenuButton>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem
+                icon={<PeopleRegular />}
+                onClick={() => navigate("/teams")}
+              >
+                {t.switchTeam}
+              </MenuItem>
+              <MenuItem
+                icon={<SettingsRegular />}
+                onClick={() => navigate("/settings")}
+              >
+                {t.settings}
+              </MenuItem>
+              <MenuItem
+                icon={<GlobeRegular />}
+                onClick={() => setLocale(locale === "en" ? "zh" : "en")}
+              >
+                {locale === "en" ? t.langChinese : t.langEnglish}
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem icon={<SignOutRegular />} onClick={() => void logout()}>
+                {t.signOut}
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </div>
-    </div>
+    </aside>
   );
 }

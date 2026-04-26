@@ -9,17 +9,18 @@ const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  * Proxy all /api/glint/* requests to the Glint instance configured for the
  * team referenced in the path, falling back to the global Glint URL.
  *
- * Path rewrite: /api/glint/foo/bar → {glint_base_url}/foo/bar
+ * Path rewrite: /api/glint/foo/bar → {glint_base_url}/api/foo/bar
  *
- * Team resolution: extracts teamId from paths like:
- *   /api/glint/workbench/teams/:teamId/...
- *   /api/glint/teams/:teamId/...
+ * Special handling:
+ *  - WebSocket upgrades (Upgrade: websocket) are passed through with the
+ *    upstream Response returned as-is so Cloudflare can complete the upgrade.
+ *  - SSE responses (Content-Type: text/event-stream) are streamed without
+ *    buffering, otherwise events would be held until the upstream closed.
  */
 glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   const session = c.get("session");
   const glintPath = c.req.path.replace(/^\/api\/glint/, "/api");
 
-  // Extract teamId from the path to resolve the correct Glint instance
   const teamIdMatch = glintPath.match(/\/teams\/([^/]+)/);
   const teamId = teamIdMatch?.[1] ?? "";
 
@@ -35,22 +36,49 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     return c.json({ error: msg }, 503);
   }
 
-  // Replace the Workbench teamId with the Glint-side workbench_id when configured
   const glintTeamId = teamConfig?.glint_team_id?.trim();
-  const resolvedPath = glintTeamId && teamId
-    ? glintPath.replace(`/teams/${teamId}`, `/teams/${glintTeamId}`)
-    : glintPath;
+  const resolvedPath =
+    glintTeamId && teamId
+      ? glintPath.replace(`/teams/${teamId}`, `/teams/${glintTeamId}`)
+      : glintPath;
 
   const reqUrl = new URL(c.req.url);
   const targetUrl = `${glintBaseUrl}${resolvedPath}${reqUrl.search}`;
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${session.accessToken}`,
-    "Content-Type": "application/json",
-  };
+  const isUpgrade =
+    c.req.header("Upgrade")?.toLowerCase() === "websocket";
 
-  const init: RequestInit = { method: c.req.method, headers };
-  if (["POST", "PATCH", "PUT"].includes(c.req.method)) {
+  // Build upstream headers — preserve client headers but inject our Bearer token.
+  const headers = new Headers();
+  const incoming = c.req.raw.headers;
+  incoming.forEach((value, key) => {
+    const lk = key.toLowerCase();
+    if (
+      lk === "host" ||
+      lk === "authorization" ||
+      lk === "cookie" ||
+      lk === "content-length"
+    ) {
+      return;
+    }
+    headers.set(key, value);
+  });
+  headers.set("Authorization", `Bearer ${session.accessToken}`);
+  const method = c.req.method;
+  if (
+    !isUpgrade &&
+    ["POST", "PATCH", "PUT"].includes(method) &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const init: RequestInit = { method, headers };
+  if (isUpgrade) {
+    // For WS upgrades, forward the raw request body / signal so the upgrade
+    // headers are preserved end-to-end.
+    init.body = c.req.raw.body;
+  } else if (["POST", "PATCH", "PUT"].includes(method)) {
     init.body = await c.req.text();
   }
 
@@ -58,17 +86,30 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   try {
     upstream = await fetch(targetUrl, init);
   } catch (e) {
-    return c.json({ error: `Glint unreachable: ${e instanceof Error ? e.message : String(e)}` }, 502);
+    return c.json(
+      {
+        error: `Glint unreachable: ${e instanceof Error ? e.message : String(e)}`,
+      },
+      502,
+    );
   }
-  const body = await upstream.text();
+
   const upstreamCT = upstream.headers.get("Content-Type") ?? "";
 
+  // 101 (WS upgrade) and SSE streams must be returned without buffering.
+  if (
+    upstream.status === 101 ||
+    upstreamCT.includes("text/event-stream")
+  ) {
+    return upstream;
+  }
+
+  const body = await upstream.text();
+
   console.log(
-    `[glint-proxy] ${c.req.method} ${targetUrl} -> ${upstream.status} ${upstreamCT} body=${body.slice(0, 300)}`,
+    `[glint-proxy] ${method} ${targetUrl} -> ${upstream.status} ${upstreamCT} body=${body.slice(0, 300)}`,
   );
 
-  // If upstream returned a non-JSON error (e.g. plain text "Internal Server Error"),
-  // wrap it in a JSON envelope so the frontend can display the body, status, and target.
   if (!upstreamCT.includes("application/json") && upstream.status >= 400) {
     return c.json(
       {

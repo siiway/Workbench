@@ -13,11 +13,13 @@ import {
   Button,
 } from "@fluentui/react-components";
 import { AuthProvider, useAuth } from "./auth";
+import { I18nProvider, useI18n } from "./i18n";
 import { Sidebar } from "./components/Sidebar";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PermissionsPage } from "./pages/PermissionsPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
@@ -29,16 +31,19 @@ const useStyles = makeStyles({
   shell: {
     display: "flex",
     height: "100%",
+    overflow: "hidden",
   },
   main: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
+    minWidth: 0,
     overflow: "hidden",
   },
   content: {
     flex: 1,
     overflow: "hidden",
+    minWidth: 0,
   },
   center: {
     display: "flex",
@@ -74,6 +79,7 @@ function useInitStatus() {
 
 function AppShell() {
   const styles = useStyles();
+  const { t } = useI18n();
   const { user, loading, sessionExpired, login, dismissExpired } = useAuth();
   const { configured, markConfigured } = useInitStatus();
   const [activeTeamId, setActiveTeamIdState] = useState<string>(
@@ -103,7 +109,7 @@ function AppShell() {
   if (loading || configured === null) {
     return (
       <div className={styles.center}>
-        <Spinner size="large" label="Loading…" />
+        <Spinner size="large" label={t.loading} />
       </div>
     );
   }
@@ -126,13 +132,13 @@ function AppShell() {
         {sessionExpired && (
           <MessageBar intent="error">
             <MessageBarBody>
-              <MessageBarTitle>Session expired</MessageBarTitle>
-              Your session has expired. Please sign in again.
+              <MessageBarTitle>{t.sessionExpiredTitle}</MessageBarTitle>
+              {t.sessionExpiredBody}
             </MessageBarBody>
             <MessageBarActions
               containerAction={
                 <Button appearance="primary" onClick={() => { dismissExpired(); void login(); }}>
-                  Sign in
+                  {t.sessionExpiredSignIn}
                 </Button>
               }
             />
@@ -170,6 +176,16 @@ function AppShell() {
                 />
               }
             />
+            <Route
+              path="/permissions"
+              element={
+                currentTeam ? (
+                  <PermissionsPage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -184,20 +200,22 @@ export default function App() {
 
   return (
     <FluentProvider theme={dark ? webDarkTheme : webLightTheme} style={{ height: "100%" }}>
-      <AuthProvider>
-        <Routes>
-          <Route path="/callback" element={<CallbackPage />} />
-          <Route
-            path="/login"
-            element={
-              <div style={{ height: "100%" }}>
-                <LoginPage />
-              </div>
-            }
-          />
-          <Route path="*" element={<AppShell />} />
-        </Routes>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/callback" element={<CallbackPage />} />
+            <Route
+              path="/login"
+              element={
+                <div style={{ height: "100%" }}>
+                  <LoginPage />
+                </div>
+              }
+            />
+            <Route path="*" element={<AppShell />} />
+          </Routes>
+        </AuthProvider>
+      </I18nProvider>
     </FluentProvider>
   );
 }
