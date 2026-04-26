@@ -105,7 +105,7 @@ export function PermissionsPage({ teamId }: Props) {
     setError(null);
     try {
       const res = await fetch(
-        `/api/glint/workbench/teams/${teamId}/permissions`,
+        `/api/glint/teams/${teamId}/permissions`,
       );
       const text = await res.text();
       let parsed: PermResponse;
@@ -181,7 +181,7 @@ export function PermissionsPage({ teamId }: Props) {
         }
       }
       const res = await fetch(
-        `/api/glint/workbench/teams/${teamId}/permissions`,
+        `/api/glint/teams/${teamId}/permissions`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -207,7 +207,7 @@ export function PermissionsPage({ teamId }: Props) {
     setError(null);
     try {
       const res = await fetch(
-        `/api/glint/workbench/teams/${teamId}/permissions?scope=global`,
+        `/api/glint/teams/${teamId}/permissions?scope=global`,
         { method: "DELETE" },
       );
       if (!res.ok) {

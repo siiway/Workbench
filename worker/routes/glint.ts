@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { requireAuth } from "../auth";
-import { resolveGlintUrl, getTeamConfig } from "../config";
+import { resolveGlintUrl } from "../config";
 
 const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -9,7 +9,9 @@ const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  * Proxy all /api/glint/* requests to the Glint instance configured for the
  * team referenced in the path, falling back to the global Glint URL.
  *
- * Path rewrite: /api/glint/foo/bar → {glint_base_url}/api/foo/bar
+ * Path rewrite:
+ *   /api/glint/workbench/foo  → {glint}/api/workbench/foo  (legacy)
+ *   /api/glint/foo            → {glint}/api/cross-app/foo  (preferred)
  *
  * Special handling:
  *  - WebSocket upgrades (Upgrade: websocket) are passed through with the
@@ -19,15 +21,17 @@ const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  */
 glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   const session = c.get("session");
-  const glintPath = c.req.path.replace(/^\/api\/glint/, "/api");
+  const rawPath = c.req.path.replace(/^\/api\/glint/, "");
+  // Legacy /api/glint/workbench/* keeps hitting Glint's /api/workbench/* shim
+  // until that route is removed. Everything else goes through cross-app.
+  const glintPath = rawPath.startsWith("/workbench/")
+    ? `/api${rawPath}`
+    : `/api/cross-app${rawPath}`;
 
   const teamIdMatch = glintPath.match(/\/teams\/([^/]+)/);
   const teamId = teamIdMatch?.[1] ?? "";
 
-  const [glintBaseUrl, teamConfig] = await Promise.all([
-    resolveGlintUrl(c.env.KV, teamId, c.env),
-    teamId ? getTeamConfig(c.env.KV, teamId) : Promise.resolve(null),
-  ]);
+  const glintBaseUrl = await resolveGlintUrl(c.env.KV, teamId, c.env);
 
   if (!glintBaseUrl) {
     const msg = teamId
@@ -36,14 +40,10 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     return c.json({ error: msg }, 503);
   }
 
-  const glintTeamId = teamConfig?.glint_team_id?.trim();
-  const resolvedPath =
-    glintTeamId && teamId
-      ? glintPath.replace(`/teams/${teamId}`, `/teams/${glintTeamId}`)
-      : glintPath;
-
+  // Team ID flows through unchanged: Workbench and Glint both speak Prism's
+  // team_id natively, so no translation is required.
   const reqUrl = new URL(c.req.url);
-  const targetUrl = `${glintBaseUrl}${resolvedPath}${reqUrl.search}`;
+  const targetUrl = `${glintBaseUrl}${glintPath}${reqUrl.search}`;
 
   const isUpgrade =
     c.req.header("Upgrade")?.toLowerCase() === "websocket";

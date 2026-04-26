@@ -26,6 +26,7 @@ init.post("/api/init/setup", async (c) => {
     prism_client_secret?: string;
     prism_redirect_uri: string;
     glint_base_url: string;
+    glint_client_id?: string;
     use_pkce?: boolean;
     session_ttl?: number;
   }>();

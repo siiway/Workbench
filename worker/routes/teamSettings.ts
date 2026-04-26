@@ -28,10 +28,9 @@ teamSettings.put("/api/teams/:teamId/settings", requireAuth, async (c) => {
     return c.json({ error: "Only team owners and co-owners can change team settings" }, 403);
   }
 
-  const body = await c.req.json<{ glint_base_url?: string; glint_team_id?: string }>();
-  const patch: { glint_base_url?: string; glint_team_id?: string } = {};
+  const body = await c.req.json<{ glint_base_url?: string }>();
+  const patch: { glint_base_url?: string } = {};
   if (body.glint_base_url !== undefined) patch.glint_base_url = body.glint_base_url.trim();
-  if (body.glint_team_id !== undefined) patch.glint_team_id = body.glint_team_id.trim();
 
   const updated = await setTeamConfig(c.env.KV, teamId, patch);
   return c.json(updated);

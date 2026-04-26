@@ -15,6 +15,7 @@ export async function getAppConfig(
   if (env?.PRISM_CLIENT_SECRET?.trim()) base.prism_client_secret = env.PRISM_CLIENT_SECRET.trim();
   if (env?.PRISM_REDIRECT_URI?.trim()) base.prism_redirect_uri = env.PRISM_REDIRECT_URI.trim();
   if (env?.GLINT_BASE_URL?.trim()) base.glint_base_url = env.GLINT_BASE_URL.trim();
+  if (env?.GLINT_CLIENT_ID?.trim()) base.glint_client_id = env.GLINT_CLIENT_ID.trim();
   return base;
 }
 

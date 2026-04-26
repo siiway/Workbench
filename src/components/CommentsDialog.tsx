@@ -111,7 +111,7 @@ export function CommentsDialog({
     setError(null);
     try {
       const res = await fetch(
-        `/api/glint/workbench/teams/${teamId}/todos/${todoId}/comments`,
+        `/api/glint/teams/${teamId}/todos/${todoId}/comments`,
       );
       const text = await res.text();
       if (!res.ok) {
@@ -142,7 +142,7 @@ export function CommentsDialog({
     if (!newComment.trim() || adding || !todoId) return;
     setAdding(true);
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todoId}/comments`,
+      `/api/glint/teams/${teamId}/todos/${todoId}/comments`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -163,7 +163,7 @@ export function CommentsDialog({
     setComments((prev) => prev.filter((c) => c.id !== commentId));
     onCommentCountChange(todoId, -1);
     await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todoId}/comments/${commentId}`,
+      `/api/glint/teams/${teamId}/todos/${todoId}/comments/${commentId}`,
       { method: "DELETE" },
     );
   };

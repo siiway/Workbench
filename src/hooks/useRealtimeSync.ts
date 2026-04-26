@@ -47,7 +47,7 @@ type Options = {
 /**
  * Subscribes to realtime todo events for a set. Tries WebSocket first, falls
  * back to SSE if the upgrade fails. Both transports are proxied through
- * /api/glint/workbench/... so the BFF injects the bearer token.
+ * /api/glint/... so the BFF injects the bearer token.
  */
 export function useRealtimeSync({
   teamId,
@@ -69,10 +69,10 @@ export function useRealtimeSync({
       retry = setTimeout(fn, delay);
     };
 
-    const sseUrl = `/api/glint/workbench/teams/${teamId}/sets/${setId}/sse`;
+    const sseUrl = `/api/glint/teams/${teamId}/sets/${setId}/sse`;
     const wsUrl = (() => {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
-      return `${proto}//${location.host}/api/glint/workbench/teams/${teamId}/sets/${setId}/ws`;
+      return `${proto}//${location.host}/api/glint/teams/${teamId}/sets/${setId}/ws`;
     })();
 
     const connectSse = () => {

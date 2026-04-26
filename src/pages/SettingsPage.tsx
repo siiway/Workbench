@@ -66,6 +66,7 @@ type GlobalConfig = {
   prism_client_secret: string;
   prism_redirect_uri: string;
   glint_base_url: string;
+  glint_client_id: string;
   use_pkce: boolean;
   session_ttl: number;
 };
@@ -172,6 +173,17 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
             disabled={!canEdit}
           />
         </Field>
+        <Field
+          label="Glint Prism client ID"
+          hint="Glint's client_id in Prism. Required for Workbench to request app:<id>:<scope> cross-app scopes during OAuth. Leave empty if Glint is colocated with this Workbench (uses /api/workbench/* fallback)."
+        >
+          <Input
+            placeholder="prism_xxxxxxxxxxxx"
+            value={form.glint_client_id}
+            onChange={set("glint_client_id")}
+            disabled={!canEdit}
+          />
+        </Field>
       </div>
 
       <div className={styles.section}>
@@ -203,7 +215,7 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
 
 // ─── Team settings tab ───────────────────────────────────────────────────────
 
-type TeamConfig = { glint_base_url: string; glint_team_id: string };
+type TeamConfig = { glint_base_url: string };
 
 function TeamSettings({ teams }: { teams: TeamInfo[] }) {
   const styles = useStyles();
@@ -215,7 +227,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
 
   const activeTeam = teams.find((t) => t.id === activeTeamId);
   const canEdit = activeTeam?.role === "owner" || activeTeam?.role === "co-owner";
-  const form = configs[activeTeamId] ?? { glint_base_url: "", glint_team_id: "" };
+  const form = configs[activeTeamId] ?? { glint_base_url: "" };
 
   useEffect(() => {
     if (!activeTeamId || configs[activeTeamId] !== undefined) return;
@@ -296,19 +308,6 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
                 setConfigs((prev) => ({
                   ...prev,
                   [activeTeamId]: { ...form, glint_base_url: e.target.value },
-                }))
-              }
-              disabled={!canEdit}
-            />
-          </Field>
-          <Field label="Glint Team ID" hint="The Workbench ID shown in Glint's team settings. Leave blank to use the Prism team ID.">
-            <Input
-              placeholder="Paste the Workbench ID from Glint"
-              value={form.glint_team_id}
-              onChange={(e) =>
-                setConfigs((prev) => ({
-                  ...prev,
-                  [activeTeamId]: { ...form, glint_team_id: e.target.value },
                 }))
               }
               disabled={!canEdit}

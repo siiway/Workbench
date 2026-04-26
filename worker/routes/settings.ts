@@ -17,6 +17,7 @@ settings.get("/api/settings", requireAuth, async (c) => {
     prism_client_secret: config.prism_client_secret ? "••••••••" : "",
     prism_redirect_uri: config.prism_redirect_uri,
     glint_base_url: config.glint_base_url,
+    glint_client_id: config.glint_client_id,
     use_pkce: config.use_pkce,
     session_ttl: config.session_ttl,
   });
@@ -34,6 +35,7 @@ settings.put("/api/settings", requireAuth, async (c) => {
     prism_client_secret?: string;
     prism_redirect_uri?: string;
     glint_base_url?: string;
+    glint_client_id?: string;
     session_ttl?: number;
   }>();
 
@@ -42,6 +44,7 @@ settings.put("/api/settings", requireAuth, async (c) => {
   if (body.prism_client_id !== undefined) patch.prism_client_id = body.prism_client_id.trim();
   if (body.prism_redirect_uri !== undefined) patch.prism_redirect_uri = body.prism_redirect_uri.trim();
   if (body.glint_base_url !== undefined) patch.glint_base_url = body.glint_base_url.trim();
+  if (body.glint_client_id !== undefined) patch.glint_client_id = body.glint_client_id.trim();
   if (body.session_ttl !== undefined) patch.session_ttl = body.session_ttl;
 
   // Only overwrite the secret if a non-masked value is provided

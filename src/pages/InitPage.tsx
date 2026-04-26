@@ -44,6 +44,7 @@ export function InitPage({ onComplete }: Props) {
     prism_client_secret: "",
     prism_redirect_uri: `${window.location.origin}/callback`,
     glint_base_url: "",
+    glint_client_id: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -107,6 +108,12 @@ export function InitPage({ onComplete }: Props) {
           hint="Used for teams that don't have a team-specific Glint URL. Can be left blank and configured per-team later."
         >
           <Input placeholder="https://glint.example.com" value={form.glint_base_url} onChange={set("glint_base_url")} />
+        </Field>
+        <Field
+          label="Glint Prism Client ID"
+          hint="Glint's client_id in Prism. Required for Workbench to request app:<id>:<scope> cross-app scopes during OAuth. Can leave empty and configure later in Settings."
+        >
+          <Input placeholder="prism_xxxxxxxxxxxx" value={form.glint_client_id} onChange={set("glint_client_id")} />
         </Field>
 
         <Button type="submit" appearance="primary" disabled={saving}>

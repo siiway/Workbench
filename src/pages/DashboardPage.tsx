@@ -145,9 +145,9 @@ export function DashboardPage({ teamId }: Props) {
     setGlintError(null);
     try {
       const [ovRes, mtRes, fdRes] = await Promise.all([
-        fetch(`/api/glint/workbench/teams/${teamId}/overview`),
-        fetch(`/api/glint/workbench/teams/${teamId}/my-todos`),
-        fetch(`/api/glint/workbench/teams/${teamId}/feed`),
+        fetch(`/api/glint/teams/${teamId}/overview`),
+        fetch(`/api/glint/teams/${teamId}/my-todos`),
+        fetch(`/api/glint/teams/${teamId}/feed`),
       ]);
       const [ovText, mtText, fdText] = await Promise.all([
         ovRes.text(), mtRes.text(), fdRes.text(),

@@ -20,8 +20,8 @@ export function usePermissions(teamId: string, setId?: string | null) {
       return;
     }
     const url = setId
-      ? `/api/glint/workbench/teams/${teamId}/permissions/me?setId=${encodeURIComponent(setId)}`
-      : `/api/glint/workbench/teams/${teamId}/permissions/me`;
+      ? `/api/glint/teams/${teamId}/permissions/me?setId=${encodeURIComponent(setId)}`
+      : `/api/glint/teams/${teamId}/permissions/me`;
     let cancelled = false;
     setState((prev) => ({ ...prev, loading: true, error: null }));
     fetch(url)

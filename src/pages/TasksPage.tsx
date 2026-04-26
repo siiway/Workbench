@@ -310,7 +310,7 @@ export function TasksPage({ teamId }: Props) {
     setSetsLoading(true);
     setGlintError(null);
     try {
-      const res = await fetch(`/api/glint/workbench/teams/${teamId}/sets`);
+      const res = await fetch(`/api/glint/teams/${teamId}/sets`);
       const text = await res.text();
       let parsed: { sets?: TodoSet[]; error?: string } = {};
       try {
@@ -346,7 +346,7 @@ export function TasksPage({ teamId }: Props) {
     setTodosError(null);
     try {
       const r = await fetch(
-        `/api/glint/workbench/teams/${teamId}/sets/${activeSetId}/todos`,
+        `/api/glint/teams/${teamId}/sets/${activeSetId}/todos`,
       );
       const text = await r.text();
       let parsed: ApiTodoListResp;
@@ -448,7 +448,7 @@ export function TasksPage({ teamId }: Props) {
       refreshSetCount(activeSetId, 0, next ? 1 : -1);
     }
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todo.id}`,
+      `/api/glint/teams/${teamId}/todos/${todo.id}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -472,7 +472,7 @@ export function TasksPage({ teamId }: Props) {
     setCreating(true);
     try {
       const res = await fetch(
-        `/api/glint/workbench/teams/${teamId}/sets/${activeSetId}/todos`,
+        `/api/glint/teams/${teamId}/sets/${activeSetId}/todos`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -497,7 +497,7 @@ export function TasksPage({ teamId }: Props) {
       refreshSetCount(activeSetId, -1, todo.completed ? -1 : 0);
     }
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todo.id}`,
+      `/api/glint/teams/${teamId}/todos/${todo.id}`,
       { method: "DELETE" },
     );
     if (!res.ok) setTodos(prev);
@@ -512,7 +512,7 @@ export function TasksPage({ teamId }: Props) {
       cur.map((t) => (t.id === todo.id ? { ...t, title: next } : t)),
     );
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todo.id}`,
+      `/api/glint/teams/${teamId}/todos/${todo.id}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -524,7 +524,7 @@ export function TasksPage({ teamId }: Props) {
 
   async function toggleClaim(todo: Todo) {
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/todos/${todo.id}/claim`,
+      `/api/glint/teams/${teamId}/todos/${todo.id}/claim`,
       { method: "POST" },
     );
     if (!res.ok) return;
@@ -560,7 +560,7 @@ export function TasksPage({ teamId }: Props) {
   // ── set mutations ────────────────────────────────────────────────────────
 
   async function createSet(name: string) {
-    const res = await fetch(`/api/glint/workbench/teams/${teamId}/sets`, {
+    const res = await fetch(`/api/glint/teams/${teamId}/sets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -580,7 +580,7 @@ export function TasksPage({ teamId }: Props) {
       setActiveSetId(next ? next.id : null);
     }
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/sets/${setId}`,
+      `/api/glint/teams/${teamId}/sets/${setId}`,
       { method: "DELETE" },
     );
     if (!res.ok) setSets(prev);
@@ -590,7 +590,7 @@ export function TasksPage({ teamId }: Props) {
     const prev = sets;
     setSets((cur) => cur.map((s) => (s.id === setId ? { ...s, ...patch } : s)));
     const res = await fetch(
-      `/api/glint/workbench/teams/${teamId}/sets/${setId}`,
+      `/api/glint/teams/${teamId}/sets/${setId}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -607,7 +607,7 @@ export function TasksPage({ teamId }: Props) {
         .map((s) => ({ ...s, sortOrder: order.get(s.id) ?? s.sortOrder }))
         .sort((a, b) => a.sortOrder - b.sortOrder),
     );
-    await fetch(`/api/glint/workbench/teams/${teamId}/sets/reorder`, {
+    await fetch(`/api/glint/teams/${teamId}/sets/reorder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items }),
@@ -621,7 +621,7 @@ export function TasksPage({ teamId }: Props) {
         order.has(t.id) ? { ...t, sortOrder: order.get(t.id)! } : t,
       ),
     );
-    await fetch(`/api/glint/workbench/teams/${teamId}/todos/reorder`, {
+    await fetch(`/api/glint/teams/${teamId}/todos/reorder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items, setId: activeSetId }),

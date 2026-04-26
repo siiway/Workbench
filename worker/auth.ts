@@ -8,13 +8,26 @@ export const SESSION_MIN_TTL_SECONDS = 24 * 60 * 60;
 export const SESSION_RENEW_WINDOW_SECONDS = 30 * 60;
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
+/**
+ * Workbench requests Glint's `workbench` bundle scope, which authorises every
+ * cross-app endpoint Glint exposes. Equivalent to granting the full granular
+ * scope set; the bundle exists specifically to keep Workbench's OAuth consent
+ * screen short.
+ */
+function buildScopes(config: AppConfig): string[] {
+  const base = ["openid", "profile", "email", "teams:read", "offline_access"];
+  const glintClientId = config.glint_client_id?.trim();
+  if (!glintClientId) return base;
+  return [...base, `app:${glintClientId}:workbench`];
+}
+
 export function getPrism(config: AppConfig) {
   return new PrismClient({
     baseUrl: config.prism_base_url,
     clientId: config.prism_client_id,
     clientSecret: config.prism_client_secret || undefined,
     redirectUri: config.prism_redirect_uri,
-    scopes: ["openid", "profile", "email", "teams:read", "offline_access"],
+    scopes: buildScopes(config),
   });
 }
 
