@@ -25,11 +25,15 @@ import type { Comment } from "../types";
 import { useI18n } from "../i18n";
 
 const useStyles = makeStyles({
+  surface: {
+    maxWidth: "min(720px, 95vw)",
+    width: "min(720px, 95vw)",
+  },
   list: {
     display: "flex",
     flexDirection: "column",
     gap: "8px",
-    maxHeight: "320px",
+    maxHeight: "360px",
     overflowY: "auto",
     marginBottom: "12px",
   },
@@ -39,14 +43,26 @@ const useStyles = makeStyles({
     padding: "8px",
     borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2,
+    alignItems: "flex-start",
   },
   content: {
     flex: 1,
     minWidth: 0,
   },
+  metaRow: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    rowGap: "2px",
+  },
   username: {
     color: tokens.colorNeutralForeground4,
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+  },
+  timestamp: {
+    color: tokens.colorNeutralForeground3,
+    whiteSpace: "nowrap",
   },
   inputRow: {
     display: "flex",
@@ -162,7 +178,7 @@ export function CommentsDialog({
         }
       }}
     >
-      <DialogSurface>
+      <DialogSurface className={styles.surface}>
         <DialogBody>
           <DialogTitle>
             {t.commentsTitle}{" "}
@@ -188,20 +204,14 @@ export function CommentsDialog({
                       size={24}
                     />
                     <div className={styles.content}>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "center",
-                        }}
-                      >
+                      <div className={styles.metaRow}>
                         <Body2 style={{ fontWeight: 600 }}>
                           {c.displayName || c.username}
                         </Body2>
                         <Caption1 className={styles.username}>
                           @{c.username}
                         </Caption1>
-                        <Caption1>
+                        <Caption1 className={styles.timestamp}>
                           {new Date(c.createdAt).toLocaleString()}
                         </Caption1>
                       </div>

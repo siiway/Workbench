@@ -38,6 +38,8 @@ import {
   CheckmarkRegular,
   DismissRegular,
   MoreHorizontalRegular,
+  ChevronDownRegular,
+  ChevronRightRegular,
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
 import type { TodoSet, Todo, Comment } from "../types";
@@ -99,6 +101,9 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorNeutralBackground1Hover,
     },
   },
+  setItemWithMenu: {
+    paddingRight: "36px",
+  },
   setItemActive: {
     backgroundColor: tokens.colorNeutralBackground1Selected,
   },
@@ -110,7 +115,7 @@ const useStyles = makeStyles({
   },
   setItemMenuBtn: {
     position: "absolute",
-    right: "6px",
+    right: "4px",
     top: "6px",
     opacity: 0,
     transition: "opacity 120ms",
@@ -268,6 +273,17 @@ export function TasksPage({ teamId }: Props) {
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredSetId, setHoveredSetId] = useState<string | null>(null);
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleCollapsed = (id: string) =>
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const [commentTodoId, setCommentTodoId] = useState<string | null>(null);
 
@@ -705,7 +721,12 @@ export function TasksPage({ teamId }: Props) {
 
   // ── row render ───────────────────────────────────────────────────────────
 
-  function renderTodoRow(todo: Todo, isSub: boolean, rootIdx?: number) {
+  function renderTodoRow(
+    todo: Todo,
+    isSub: boolean,
+    rootIdx?: number,
+    hasChildren?: boolean,
+  ) {
     const isOwn = todo.userId === myId;
     const isClaimedByMe = !!myId && todo.claimedBy === myId;
     const canEdit = isOwn ? can("edit_own_todos") : can("edit_any_todo");
@@ -715,6 +736,7 @@ export function TasksPage({ teamId }: Props) {
     const canDrag = !isSub && can("reorder_todos") && rootIdx !== undefined;
     const isEditing = editingId === todo.id;
     const showActions = hoveredId === todo.id || isEditing;
+    const collapsed = !isSub && collapsedParents.has(todo.id);
 
     return (
       <div
@@ -739,6 +761,23 @@ export function TasksPage({ teamId }: Props) {
         onMouseEnter={() => setHoveredId(todo.id)}
         onMouseLeave={() => setHoveredId((id) => (id === todo.id ? null : id))}
       >
+        {!isSub && (
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={
+              collapsed ? <ChevronRightRegular /> : <ChevronDownRegular />
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasChildren) toggleCollapsed(todo.id);
+            }}
+            style={{
+              visibility: hasChildren ? "visible" : "hidden",
+              minWidth: 24,
+            }}
+          />
+        )}
         <Checkbox
           checked={todo.completed}
           disabled={!canToggle}
@@ -916,6 +955,7 @@ export function TasksPage({ teamId }: Props) {
                   key={set.id}
                   className={mergeClasses(
                     styles.setItem,
+                    canManage && styles.setItemWithMenu,
                     set.id === activeSetId && styles.setItemActive,
                     canDrag && dragSetIdx === i && styles.setItemDragging,
                     canDrag &&
@@ -1075,9 +1115,15 @@ export function TasksPage({ teamId }: Props) {
                 <Caption1 className={styles.empty}>{t.noTasks}</Caption1>
               ) : (
                 <>
-                  {rootTodos.map((todo, idx) => (
+                  {rootTodos.map((todo, idx) => {
+                    const subs = subTodosOf(todo.id);
+                    const hasChildren = subs.length > 0;
+                    const isCollapsed = collapsedParents.has(todo.id);
+                    const showSubs =
+                      !isCollapsed || subComposerFor === todo.id;
+                    return (
                     <div key={todo.id}>
-                      {renderTodoRow(todo, false, idx)}
+                      {renderTodoRow(todo, false, idx, hasChildren)}
                       {subComposerFor === todo.id && (
                         <div className={styles.subComposer}>
                           <Input
@@ -1123,9 +1169,11 @@ export function TasksPage({ teamId }: Props) {
                           </Button>
                         </div>
                       )}
-                      {subTodosOf(todo.id).map((sub) => renderTodoRow(sub, true))}
+                      {showSubs &&
+                        subs.map((sub) => renderTodoRow(sub, true))}
                     </div>
-                  ))}
+                    );
+                  })}
                   <Caption1 className={styles.footerCount}>
                     {t.completeRatio(completedRoot, rootTodos.length)}
                   </Caption1>
