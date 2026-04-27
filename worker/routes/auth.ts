@@ -7,6 +7,7 @@ import {
   fetchUserTeams,
   resolveSessionTtl,
   renewSessionIfExpiring,
+  buildScopes,
   SESSION_MIN_TTL_SECONDS,
 } from "../auth";
 
@@ -19,6 +20,7 @@ auth.get("/api/auth/config", async (c) => {
     clientId: config.prism_client_id,
     redirectUri: config.prism_redirect_uri,
     usePkce: config.use_pkce,
+    scopes: buildScopes(config),
   });
 });
 

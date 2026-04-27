@@ -15,7 +15,16 @@ type AuthConfig = {
   clientId: string;
   redirectUri: string;
   usePkce: boolean;
+  scopes: string[];
 };
+
+const FALLBACK_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "teams:read",
+  "offline_access",
+];
 
 type AuthContextType = {
   user: User | null;
@@ -36,11 +45,15 @@ function getConfig(): Promise<AuthConfig> {
   if (!configPromise) {
     configPromise = fetch("/api/auth/config")
       .then((r) => r.json())
-      .then((cfg: AuthConfig) => ({
-        baseUrl: cfg.baseUrl,
-        clientId: cfg.clientId,
+      .then((cfg: Partial<AuthConfig>) => ({
+        baseUrl: cfg.baseUrl ?? "",
+        clientId: cfg.clientId ?? "",
         redirectUri: cfg.redirectUri || `${window.location.origin}/callback`,
         usePkce: cfg.usePkce ?? true,
+        scopes:
+          Array.isArray(cfg.scopes) && cfg.scopes.length > 0
+            ? cfg.scopes
+            : FALLBACK_SCOPES,
       }));
   }
   return configPromise;
@@ -54,7 +67,7 @@ function getPrism(): Promise<PrismClient> {
           baseUrl: cfg.baseUrl,
           clientId: cfg.clientId,
           redirectUri: cfg.redirectUri,
-          scopes: ["openid", "profile", "email", "teams:read", "offline_access"],
+          scopes: cfg.scopes,
         }),
     );
   }
@@ -111,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         response_type: "code",
         client_id: cfg.clientId,
         redirect_uri: cfg.redirectUri,
-        scope: "openid profile email teams:read offline_access",
+        scope: cfg.scopes.join(" "),
         state,
       });
       sessionStorage.setItem("pkce_state", state);

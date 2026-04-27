@@ -14,7 +14,7 @@ const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
  * scope set; the bundle exists specifically to keep Workbench's OAuth consent
  * screen short.
  */
-function buildScopes(config: AppConfig): string[] {
+export function buildScopes(config: AppConfig): string[] {
   const base = ["openid", "profile", "email", "teams:read", "offline_access"];
   const glintClientId = config.glint_client_id?.trim();
   if (!glintClientId) return base;

@@ -9,9 +9,7 @@ const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  * Proxy all /api/glint/* requests to the Glint instance configured for the
  * team referenced in the path, falling back to the global Glint URL.
  *
- * Path rewrite:
- *   /api/glint/workbench/foo  → {glint}/api/workbench/foo  (legacy)
- *   /api/glint/foo            → {glint}/api/cross-app/foo  (preferred)
+ * Path rewrite: /api/glint/foo → {glint}/api/cross-app/foo
  *
  * Special handling:
  *  - WebSocket upgrades (Upgrade: websocket) are passed through with the
@@ -21,12 +19,7 @@ const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  */
 glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   const session = c.get("session");
-  const rawPath = c.req.path.replace(/^\/api\/glint/, "");
-  // Legacy /api/glint/workbench/* keeps hitting Glint's /api/workbench/* shim
-  // until that route is removed. Everything else goes through cross-app.
-  const glintPath = rawPath.startsWith("/workbench/")
-    ? `/api${rawPath}`
-    : `/api/cross-app${rawPath}`;
+  const glintPath = c.req.path.replace(/^\/api\/glint/, "/api/cross-app");
 
   const teamIdMatch = glintPath.match(/\/teams\/([^/]+)/);
   const teamId = teamIdMatch?.[1] ?? "";

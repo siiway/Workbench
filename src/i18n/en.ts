@@ -91,14 +91,17 @@ const en = {
 
   // Permissions page
   permissionsTitle: "Permissions",
-  permissionsSubtitle:
-    "Global team permissions. Owners and co-owners always have everything.",
-  permReset: "Reset",
-  permSave: "Save",
+  permissionsReadOnlyHint:
+    "Read-only view of permissions across connected apps. Use the linked app to make changes.",
   permLoading: "Loading permissions…",
-  permReadOnly: "You don't have permission to edit. Showing read-only view.",
-  permSaved: "Saved.",
-  permGlobal: "Global",
+  permYourPermissions: "Your permissions",
+  permYourPermissionsHint:
+    "What you can do in this team. Owners and co-owners have everything by default.",
+  permYourPermissionsEmpty: "You currently have no permissions in this team.",
+  permShowDenied: (n: number) => `Show ${n} denied permission${n === 1 ? "" : "s"}`,
+  permTeamConfig: "Team configuration",
+  permTeamConfigHint:
+    "Permission matrix for admin and member roles. Visible to owners and co-owners only.",
   permColPermission: "Permission",
   permColAdmin: "Admin",
   permColMember: "Member",

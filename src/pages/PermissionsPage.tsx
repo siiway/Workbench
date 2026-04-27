@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   Body1,
-  Button,
+  Body2,
   Caption1,
-  Checkbox,
   MessageBar,
   MessageBarBody,
   Spinner,
@@ -12,15 +11,23 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { ArrowResetRegular, SaveRegular } from "@fluentui/react-icons";
+import {
+  CheckmarkCircleRegular,
+  DismissCircleRegular,
+} from "@fluentui/react-icons";
 import { PERMISSION_KEYS, type PermissionKey, type TeamRole } from "../types";
 import { useI18n } from "../i18n";
 
 type EditableRole = "admin" | "member";
-
 const EDITABLE_ROLES: EditableRole[] = ["admin", "member"];
 
-type PermResponse = {
+type PermissionsMe = {
+  permissions: Record<PermissionKey, boolean>;
+  role: TeamRole;
+  error?: string;
+};
+
+type MatrixResponse = {
   keys: readonly PermissionKey[];
   defaults: Record<EditableRole | "co-owner", Record<PermissionKey, boolean>>;
   global: Record<EditableRole, Record<PermissionKey, boolean>>;
@@ -30,22 +37,68 @@ type PermResponse = {
 };
 
 const useStyles = makeStyles({
-  page: {
-    padding: "24px 32px",
+  pageScroll: {
     height: "100%",
     overflowY: "auto",
     boxSizing: "border-box",
-    maxWidth: "960px",
-    margin: "0 auto",
   },
-  header: {
+  page: {
+    padding: "24px 32px",
+    boxSizing: "border-box",
+    maxWidth: "960px",
+    width: "100%",
+    margin: "0 auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
+  },
+  pageHeader: {
     display: "flex",
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: "16px",
-    paddingBottom: "16px",
+    paddingBottom: "12px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    marginBottom: "20px",
+  },
+  card: {
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+    overflow: "hidden",
+  },
+  cardHeader: {
+    padding: "14px 18px",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+  },
+  cardBody: {
+    padding: "16px 18px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  },
+  sectionLabel: {
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
+  },
+  meList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: "8px 16px",
+  },
+  meItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "6px 0",
+  },
+  permName: {
+    fontFamily:
+      "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    fontSize: "12.5px",
   },
   matrix: {
     width: "100%",
@@ -70,19 +123,13 @@ const useStyles = makeStyles({
   tdRole: {
     textAlign: "center",
   },
-  permName: {
-    fontFamily:
-      "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-    fontSize: "12.5px",
-  },
-  defaultMark: {
+  custom: {
     color: tokens.colorNeutralForeground4,
     fontSize: "11px",
     marginLeft: "6px",
   },
-  actions: {
-    display: "flex",
-    gap: "8px",
+  hint: {
+    color: tokens.colorNeutralForeground3,
   },
 });
 
@@ -91,248 +138,247 @@ type Props = { teamId: string };
 export function PermissionsPage({ teamId }: Props) {
   const styles = useStyles();
   const { t } = useI18n();
-  const [data, setData] = useState<PermResponse | null>(null);
-  const [draft, setDraft] = useState<
-    Record<EditableRole, Record<PermissionKey, boolean>> | null
-  >(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const load = async () => {
+  const [me, setMe] = useState<PermissionsMe | null>(null);
+  const [matrix, setMatrix] = useState<MatrixResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load self perms (always) + matrix (only for owner/co-owner)
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(
-        `/api/glint/teams/${teamId}/permissions`,
-      );
-      const text = await res.text();
-      let parsed: PermResponse;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        setError(`Unexpected response (${res.status}): ${text.slice(0, 300)}`);
-        return;
-      }
-      if (!res.ok) {
-        setError(parsed.error ?? `Error ${res.status}`);
-        return;
-      }
-      setData(parsed);
-      // Resolve effective globals: row exists → use it; else fall back to defaults.
-      const effective: Record<EditableRole, Record<PermissionKey, boolean>> = {
-        admin: { ...parsed.defaults.admin },
-        member: { ...parsed.defaults.member },
-      };
-      for (const role of EDITABLE_ROLES) {
-        const row = parsed.global?.[role] ?? {};
-        for (const k of parsed.keys) {
-          if (k in row) effective[role][k] = row[k];
+
+    fetch(`/api/glint/teams/${teamId}/permissions/me`)
+      .then(async (r) => {
+        const text = await r.text();
+        if (!r.ok) throw new Error(parseError(text, r.status));
+        return JSON.parse(text) as PermissionsMe;
+      })
+      .then(async (meData) => {
+        if (cancelled) return;
+        setMe(meData);
+        if (meData.role === "owner" || meData.role === "co-owner") {
+          const r = await fetch(`/api/glint/teams/${teamId}/permissions`);
+          const text = await r.text();
+          if (!cancelled) {
+            if (r.ok) {
+              setMatrix(JSON.parse(text) as MatrixResponse);
+            } else {
+              setError(parseError(text, r.status));
+            }
+          }
         }
-      }
-      setDraft(effective);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [teamId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const canEdit = useMemo(() => {
-    if (!data) return false;
-    return data.role === "owner" || data.role === "co-owner" || data.role === "admin";
-  }, [data]);
-
-  const dirty = useMemo(() => {
-    if (!data || !draft) return false;
-    for (const role of EDITABLE_ROLES) {
-      for (const k of data.keys) {
-        const baseline = data.defaults[role][k];
-        const stored = data.global?.[role]?.[k];
-        const effectiveOriginal = stored !== undefined ? stored : baseline;
-        if (draft[role][k] !== effectiveOriginal) return true;
-      }
-    }
-    return false;
-  }, [data, draft]);
-
-  const toggle = (role: EditableRole, key: PermissionKey) => {
-    if (!draft) return;
-    setDraft({
-      ...draft,
-      [role]: { ...draft[role], [key]: !draft[role][key] },
-    });
-  };
-
-  const save = async () => {
-    if (!data || !draft) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const rows: { role: EditableRole; permission: PermissionKey; allowed: boolean }[] = [];
-      for (const role of EDITABLE_ROLES) {
-        for (const k of data.keys) {
-          rows.push({ role, permission: k, allowed: draft[role][k] });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Network error");
         }
-      }
-      const res = await fetch(
-        `/api/glint/teams/${teamId}/permissions`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: "global", permissions: rows }),
-        },
-      );
-      if (!res.ok) {
-        const text = await res.text();
-        setError(`Save failed (${res.status}): ${text.slice(0, 300)}`);
-        return;
-      }
-      setSavedAt(Date.now());
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setSaving(false);
-    }
-  };
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId]);
 
-  const resetToDefaults = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/glint/teams/${teamId}/permissions?scope=global`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        const text = await res.text();
-        setError(`Reset failed (${res.status}): ${text.slice(0, 300)}`);
-        return;
-      }
-      setSavedAt(Date.now());
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const isAdminish = me?.role === "owner" || me?.role === "co-owner";
 
   if (loading) {
     return (
-      <div className={styles.page}>
-        <Spinner label={t.permLoading} />
+      <div className={styles.pageScroll}>
+        <div className={styles.page}>
+          <Spinner label={t.permLoading} />
+        </div>
       </div>
     );
   }
 
-  if (error && !data) {
+  if (error && !me) {
     return (
-      <div className={styles.page}>
-        <MessageBar intent="error">
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
+      <div className={styles.pageScroll}>
+        <div className={styles.page}>
+          <MessageBar intent="error">
+            <MessageBarBody>{error}</MessageBarBody>
+          </MessageBar>
+        </div>
       </div>
     );
   }
 
-  if (!data || !draft) return null;
+  if (!me) return null;
+
+  const grantedKeys = PERMISSION_KEYS.filter((k) => me.permissions[k]);
+  const deniedKeys = PERMISSION_KEYS.filter((k) => !me.permissions[k]);
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
+    <div className={styles.pageScroll}>
+      <div className={styles.page}>
+        <header className={styles.pageHeader}>
         <div>
           <Title2>{t.permissionsTitle}</Title2>
           <Caption1
             block
             style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}
           >
-            {t.permissionsSubtitle}
+            {t.permissionsReadOnlyHint}
           </Caption1>
-        </div>
-        <div className={styles.actions}>
-          <Button
-            appearance="subtle"
-            icon={<ArrowResetRegular />}
-            onClick={() => void resetToDefaults()}
-            disabled={!canEdit || saving}
-          >
-            {t.permReset}
-          </Button>
-          <Button
-            appearance="primary"
-            icon={<SaveRegular />}
-            onClick={() => void save()}
-            disabled={!canEdit || !dirty || saving}
-          >
-            {t.permSave}
-          </Button>
         </div>
       </header>
 
-      {!canEdit && (
-        <MessageBar intent="info" style={{ marginBottom: 16 }}>
-          <MessageBarBody>{t.permReadOnly}</MessageBarBody>
-        </MessageBar>
-      )}
       {error && (
-        <MessageBar intent="error" style={{ marginBottom: 16 }}>
+        <MessageBar intent="warning">
           <MessageBarBody>{error}</MessageBarBody>
         </MessageBar>
       )}
-      {savedAt && !error && (
-        <Body1 style={{ color: tokens.colorPaletteGreenForeground1, marginBottom: 12 }}>
-          {t.permSaved}
-        </Body1>
-      )}
 
-      <Subtitle1 block style={{ marginBottom: 8 }}>
-        {t.permGlobal}
-      </Subtitle1>
-
-      <table className={styles.matrix}>
-        <thead>
-          <tr>
-            <th className={styles.th}>{t.permColPermission}</th>
-            <th className={`${styles.th} ${styles.thRole}`}>{t.permColAdmin}</th>
-            <th className={`${styles.th} ${styles.thRole}`}>{t.permColMember}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {PERMISSION_KEYS.map((key) => (
-            <tr key={key}>
-              <td className={styles.td}>
-                <span className={styles.permName}>{key}</span>
-              </td>
-              {EDITABLE_ROLES.map((role) => {
-                const checked = draft[role][key];
-                const isDefault = data.defaults[role][key] === checked;
-                return (
-                  <td
-                    key={role}
-                    className={`${styles.td} ${styles.tdRole}`}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={!canEdit}
-                      onChange={() => toggle(role, key)}
+      {/* Glint section */}
+      <section className={styles.card}>
+        <div className={styles.cardHeader}>
+          <Subtitle1>Glint</Subtitle1>
+        </div>
+        <div className={styles.cardBody}>
+          {/* Your permissions — visible to everyone */}
+          <div>
+            <Body2 className={styles.sectionLabel}>
+              {t.permYourPermissions} ({me.role})
+            </Body2>
+            <Caption1
+              block
+              style={{ color: tokens.colorNeutralForeground3, marginBottom: 8 }}
+            >
+              {t.permYourPermissionsHint}
+            </Caption1>
+            {grantedKeys.length === 0 ? (
+              <Body1 className={styles.hint}>{t.permYourPermissionsEmpty}</Body1>
+            ) : (
+              <div className={styles.meList}>
+                {grantedKeys.map((k) => (
+                  <div key={k} className={styles.meItem}>
+                    <CheckmarkCircleRegular
+                      fontSize={16}
+                      color={tokens.colorPaletteGreenForeground1}
                     />
-                    {!isDefault && (
-                      <span className={styles.defaultMark}>{t.permCustom}</span>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    <span className={styles.permName}>{k}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {deniedKeys.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary
+                  style={{
+                    color: tokens.colorNeutralForeground3,
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {t.permShowDenied(deniedKeys.length)}
+                </summary>
+                <div className={styles.meList} style={{ marginTop: 8 }}>
+                  {deniedKeys.map((k) => (
+                    <div key={k} className={styles.meItem}>
+                      <DismissCircleRegular
+                        fontSize={16}
+                        color={tokens.colorNeutralForeground4}
+                      />
+                      <span
+                        className={styles.permName}
+                        style={{ color: tokens.colorNeutralForeground3 }}
+                      >
+                        {k}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+
+          {/* Team config — only for owner / co-owner */}
+          {isAdminish && matrix && (
+            <div>
+              <Body2 className={styles.sectionLabel}>
+                {t.permTeamConfig}
+              </Body2>
+              <Caption1
+                block
+                style={{
+                  color: tokens.colorNeutralForeground3,
+                  marginBottom: 8,
+                }}
+              >
+                {t.permTeamConfigHint}
+              </Caption1>
+              <table className={styles.matrix}>
+                <thead>
+                  <tr>
+                    <th className={styles.th}>{t.permColPermission}</th>
+                    <th className={`${styles.th} ${styles.thRole}`}>
+                      {t.permColAdmin}
+                    </th>
+                    <th className={`${styles.th} ${styles.thRole}`}>
+                      {t.permColMember}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {PERMISSION_KEYS.map((key) => (
+                    <tr key={key}>
+                      <td className={styles.td}>
+                        <span className={styles.permName}>{key}</span>
+                      </td>
+                      {EDITABLE_ROLES.map((role) => {
+                        const value =
+                          matrix.global?.[role]?.[key] ??
+                          matrix.defaults[role][key];
+                        const isDefault =
+                          matrix.global?.[role]?.[key] === undefined ||
+                          matrix.defaults[role][key] === value;
+                        return (
+                          <td
+                            key={role}
+                            className={`${styles.td} ${styles.tdRole}`}
+                          >
+                            {value ? (
+                              <CheckmarkCircleRegular
+                                fontSize={18}
+                                color={tokens.colorPaletteGreenForeground1}
+                              />
+                            ) : (
+                              <DismissCircleRegular
+                                fontSize={18}
+                                color={tokens.colorNeutralForeground4}
+                              />
+                            )}
+                            {!isDefault && (
+                              <span className={styles.custom}>
+                                {t.permCustom}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+      </div>
     </div>
   );
+}
+
+function parseError(text: string, status: number): string {
+  try {
+    const j = JSON.parse(text);
+    return j.error ?? `${status}`;
+  } catch {
+    return `${status}: ${text.slice(0, 200)}`;
+  }
 }

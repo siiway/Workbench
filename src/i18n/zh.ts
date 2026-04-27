@@ -93,13 +93,16 @@ const zh: Translations = {
 
   // Permissions page
   permissionsTitle: "权限",
-  permissionsSubtitle: "团队全局权限。所有者与共同所有者始终拥有全部权限。",
-  permReset: "重置",
-  permSave: "保存",
+  permissionsReadOnlyHint:
+    "已连接应用的权限只读视图。如需修改，请在对应应用中操作。",
   permLoading: "正在加载权限…",
-  permReadOnly: "您没有编辑权限，仅可查看。",
-  permSaved: "已保存。",
-  permGlobal: "全局",
+  permYourPermissions: "您的权限",
+  permYourPermissionsHint:
+    "您在该团队可以执行的操作。所有者与共同所有者默认拥有全部权限。",
+  permYourPermissionsEmpty: "您在该团队当前没有任何权限。",
+  permShowDenied: (n: number) => `显示 ${n} 项被拒绝的权限`,
+  permTeamConfig: "团队权限策略",
+  permTeamConfigHint: "管理员与成员角色的权限矩阵。仅所有者与共同所有者可见。",
   permColPermission: "权限",
   permColAdmin: "管理员",
   permColMember: "成员",
