@@ -6,6 +6,8 @@ import authRoutes from "./routes/auth";
 import glintRoutes from "./routes/glint";
 import settingsRoutes from "./routes/settings";
 import teamSettingsRoutes from "./routes/teamSettings";
+import appsRoutes from "./routes/apps";
+import keybindsRoutes from "./routes/keybinds";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -21,5 +23,7 @@ app.route("/", authRoutes);
 app.route("/", glintRoutes);
 app.route("/", settingsRoutes);
 app.route("/", teamSettingsRoutes);
+app.route("/", appsRoutes);
+app.route("/", keybindsRoutes);
 
 export default { fetch: app.fetch };

@@ -56,13 +56,42 @@ auth.get("/api/auth/me", async (c) => {
     });
   }
 
+  // Refresh teams (and therefore roles) from Prism on every /me call so the
+  // sidebar reflects the current authoritative state, not whatever was cached
+  // when the session was first minted. Falls back to the cached session.teams
+  // if Prism is unreachable so transient outages don't log the user out.
+  let teams = activeSession.teams;
+  try {
+    const config = await getAppConfig(c.env.KV, c.env);
+    const prism = getPrism(config);
+    const fresh = await fetchUserTeams(prism, activeSession.accessToken);
+    if (fresh.length > 0) {
+      teams = fresh;
+      const teamsChanged =
+        JSON.stringify(fresh) !== JSON.stringify(activeSession.teams);
+      if (teamsChanged) {
+        const ttl = Math.max(
+          Math.ceil((activeSession.expiresAt - Date.now()) / 1000),
+          SESSION_MIN_TTL_SECONDS,
+        );
+        await c.env.KV.put(
+          `session:${sessionId}`,
+          JSON.stringify({ ...activeSession, teams: fresh }),
+          { expirationTtl: ttl },
+        );
+      }
+    }
+  } catch {
+    // Prism is down — keep showing cached roles rather than hiding teams.
+  }
+
   return c.json({
     user: {
       id: activeSession.userId,
       username: activeSession.username,
       displayName: activeSession.displayName,
       avatarUrl: activeSession.avatarUrl,
-      teams: activeSession.teams,
+      teams,
     },
   });
 });

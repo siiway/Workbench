@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import {
   FluentProvider,
   webLightTheme,
@@ -20,9 +20,18 @@ import { TasksPage } from "./pages/TasksPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
+import { AppsPage } from "./pages/AppsPage";
+import { ConsolePage } from "./pages/ConsolePage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
+import { ConsoleProvider, useConsole } from "./console/ConsoleProvider";
+import { ConsoleDrawer } from "./console/ConsoleDrawer";
+import { commands } from "./console/commands";
+import {
+  KeybindProvider,
+  useKeybindHandler,
+} from "./keybinds/KeybindProvider";
 import type { TeamInfo } from "./types";
 
 const ACTIVE_TEAM_KEY = "workbench:activeTeamId";
@@ -126,6 +135,9 @@ function AppShell() {
   const currentTeam = activeTeamId || teams[0]?.id || "";
 
   return (
+    <KeybindProvider>
+    <ConsoleProvider registry={commands}>
+    <KeybindWiring />
     <div className={styles.shell}>
       <Sidebar teams={teams} activeTeamId={currentTeam} />
       <div className={styles.main}>
@@ -177,6 +189,26 @@ function AppShell() {
               }
             />
             <Route
+              path="/apps"
+              element={
+                currentTeam ? (
+                  <AppsPage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
+            <Route
+              path="/console"
+              element={
+                currentTeam ? (
+                  <ConsolePage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
+            <Route
               path="/permissions"
               element={
                 currentTeam ? (
@@ -191,8 +223,22 @@ function AppShell() {
           </Routes>
         </div>
       </div>
+      {currentTeam && <ConsoleDrawer teamId={currentTeam} />}
     </div>
+    </ConsoleProvider>
+    </KeybindProvider>
   );
+}
+
+function KeybindWiring() {
+  const navigate = useNavigate();
+  const { drawerOpen, setDrawerOpen } = useConsole();
+  useKeybindHandler("console.toggle", () => setDrawerOpen(!drawerOpen));
+  useKeybindHandler("nav.overview", () => navigate("/"));
+  useKeybindHandler("nav.tasks", () => navigate("/tasks"));
+  useKeybindHandler("nav.apps", () => navigate("/apps"));
+  useKeybindHandler("nav.permissions", () => navigate("/permissions"));
+  return null;
 }
 
 export default function App() {

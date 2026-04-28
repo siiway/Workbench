@@ -22,6 +22,8 @@ import {
   SignOutRegular,
   ShieldRegular,
   GlobeRegular,
+  AppsRegular,
+  WindowConsoleRegular,
 } from "@fluentui/react-icons";
 import { NavLink, useNavigate } from "react-router-dom";
 import type { TeamInfo, TeamRole } from "../types";
@@ -152,6 +154,8 @@ export function Sidebar({ teams, activeTeamId }: Props) {
       <nav className={styles.nav}>
         <NavItem to="/" end icon={<HomeRegular />} label={t.navOverview} />
         <NavItem to="/tasks" icon={<CheckmarkCircleRegular />} label={t.navTasks} />
+        <NavItem to="/apps" icon={<AppsRegular />} label={t.navApps} />
+        <NavItem to="/console" icon={<WindowConsoleRegular />} label={t.navConsole} />
         <NavItem to="/permissions" icon={<ShieldRegular />} label={t.navPermissions} />
       </nav>
 

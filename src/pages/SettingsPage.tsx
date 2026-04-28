@@ -20,6 +20,7 @@ import {
 import type { SelectTabData } from "@fluentui/react-components";
 import { LockClosed20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../auth";
+import { KeybindsSettings } from "../components/KeybindsSettings";
 import type { TeamInfo } from "../types";
 
 const useStyles = makeStyles({
@@ -332,7 +333,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
 export function SettingsPage() {
   const styles = useStyles();
   const { user } = useAuth();
-  const [tab, setTab] = useState<"global" | "team">("global");
+  const [tab, setTab] = useState<"global" | "team" | "keybinds">("global");
 
   const canEditGlobal = user?.teams.some(
     (t) => t.role === "owner" || t.role === "co-owner",
@@ -343,14 +344,18 @@ export function SettingsPage() {
       <Title2>Settings</Title2>
       <TabList
         selectedValue={tab}
-        onTabSelect={(_, d: SelectTabData) => setTab(d.value as "global" | "team")}
+        onTabSelect={(_, d: SelectTabData) =>
+          setTab(d.value as "global" | "team" | "keybinds")
+        }
       >
         <Tab value="global">Global</Tab>
         <Tab value="team">Teams</Tab>
+        <Tab value="keybinds">Keybinds</Tab>
       </TabList>
 
       {tab === "global" && <GlobalSettings canEdit={canEditGlobal} />}
       {tab === "team" && <TeamSettings teams={user?.teams ?? []} />}
+      {tab === "keybinds" && <KeybindsSettings />}
     </div>
   );
 }

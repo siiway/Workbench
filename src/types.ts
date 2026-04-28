@@ -116,3 +116,32 @@ export type Comment = {
   body: string;
   createdAt: string;
 };
+
+// ── Apps Launcher ──────────────────────────────────────────────────────────
+
+export type AppCard = {
+  id: string;
+  name: string;
+  url: string;
+  iconUrl?: string;
+  description?: string;
+  tags: string[];
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  // TODO(short-link): add `slug?: string` — stable per-team identifier for
+  // /a/<slug> redirects. Empty → fall back to a generated short ID. KV needs a
+  // reverse index `app-link:<slug>` → {teamId, appId} for O(1) lookup.
+};
+
+export type AppGroup = {
+  id: string;
+  name: string;
+  appIds: string[];
+  sortOrder: number;
+};
+
+export type UserAppPrefs = {
+  favorites: string[];
+  groups: AppGroup[];
+};

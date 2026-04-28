@@ -13,6 +13,10 @@ const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
  * cross-app endpoint Glint exposes. Equivalent to granting the full granular
  * scope set; the bundle exists specifically to keep Workbench's OAuth consent
  * screen short.
+ *
+ * TODO(prism-picker): add `team_apps:read` to the base list once Prism
+ * exposes `GET /api/oauth/me/teams/:teamId/apps`. The picker tab in
+ * AppCardDialog needs that scope to call the new endpoint via the BFF.
  */
 export function buildScopes(config: AppConfig): string[] {
   const base = ["openid", "profile", "email", "teams:read", "offline_access"];
