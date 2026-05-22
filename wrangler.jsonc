@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "workbench",
   "main": "worker/index.ts",
+  "account_id": "a55f78dc73452cce2da2a69798c86db3",
   "compatibility_date": "2026-04-25",
   "assets": {
     "not_found_handling": "single-page-application"
@@ -14,7 +15,7 @@
     {
       // Replace with your KV namespace ID after running: wrangler kv namespace create workbench-kv
       "binding": "KV",
-      "id": "REPLACE_WITH_YOUR_KV_ID"
+      "id": "4225274e469a45cf8473fa55a0ace2fd"
     }
   ],
   // Optional: set these to skip the web-based init flow.
@@ -27,7 +28,7 @@
   // },
   "routes": [
     {
-      "pattern": "workbench.siiway.org",
+      "pattern": "dash.siiway.org",
       "custom_domain": true
     }
   ]
