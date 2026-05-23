@@ -46,6 +46,7 @@ export function ConsoleDrawer({ teamId }: Props) {
       <Console
         teamId={teamId}
         showClose
+        visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       />
     </div>

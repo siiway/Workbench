@@ -15,7 +15,7 @@ export function ConsolePage({ teamId }: Props) {
   const styles = useStyles();
   return (
     <div className={styles.root}>
-      <Console teamId={teamId} />
+      <Console teamId={teamId} visible />
     </div>
   );
 }

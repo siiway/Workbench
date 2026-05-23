@@ -196,7 +196,10 @@ const useStyles = makeStyles({
     boxShadow: `inset 0 2px 0 0 ${tokens.colorBrandStroke1}`,
   },
   todoItemSub: {
-    paddingLeft: "32px",
+    // Parent row reserves: padding-left(8) + chevron-btn(24) + gap(8) = 40px
+    // before its checkbox. Subtasks should indent past that, so 56px puts the
+    // sub checkbox ~16px to the right of the parent's.
+    paddingLeft: "56px",
   },
   todoTitle: {
     flex: 1,
@@ -221,7 +224,8 @@ const useStyles = makeStyles({
   subComposer: {
     display: "flex",
     gap: "6px",
-    padding: "6px 8px 6px 40px",
+    // Align with todoItemSub paddingLeft (56) minus the todoItem default padding (8)
+    padding: "6px 8px 6px 56px",
   },
   editRow: {
     display: "flex",

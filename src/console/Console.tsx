@@ -41,6 +41,12 @@ type Props = {
   /** When true, an "X" close button is rendered in the header (drawer mode). */
   showClose?: boolean;
   onClose?: () => void;
+  /**
+   * Visibility signal from the host. The dedicated page passes `true` once mounted;
+   * the drawer flips it with `drawerOpen`. We focus the input every time this
+   * transitions to true so the user doesn't have to click into it.
+   */
+  visible?: boolean;
 };
 
 const useStyles = makeStyles({
@@ -163,25 +169,59 @@ const useStyles = makeStyles({
     padding: 0,
     "&::placeholder": { color: tokens.colorNeutralForeground4 },
   },
-  suggestions: {
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground2,
-    maxHeight: "240px",
+  // OpenCode-style centered overlay. Fixed-position so it floats above the
+  // page chrome and centers on screen regardless of whether the console is
+  // mounted in the drawer or on its dedicated page.
+  suggestionsOverlay: {
+    position: "fixed",
+    left: "50%",
+    bottom: "min(40vh, 360px)",
+    transform: "translateX(-50%)",
+    width: "min(640px, 92vw)",
+    maxHeight: "min(50vh, 420px)",
     overflowY: "auto",
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: tokens.shadow28,
+    zIndex: 1000,
+    padding: "4px",
+    fontFamily:
+      "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace",
+    fontSize: "13px",
   },
   suggestionItem: {
-    padding: "6px 12px",
+    padding: "8px 12px",
     display: "flex",
     alignItems: "center",
     gap: "8px",
     cursor: "pointer",
+    borderRadius: tokens.borderRadiusMedium,
     "&:hover": {
       backgroundColor: tokens.colorNeutralBackground3,
     },
   },
   suggestionItemActive: {
-    backgroundColor: tokens.colorNeutralBackground3,
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground1,
+  },
+  suggestionsFooter: {
+    padding: "6px 12px",
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    color: tokens.colorNeutralForeground3,
+    fontSize: "11px",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginTop: "4px",
+  },
+  kbd: {
+    fontFamily: "inherit",
+    padding: "1px 5px",
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: "3px",
+    backgroundColor: tokens.colorNeutralBackground2,
+    fontSize: "10.5px",
   },
   suggestionLabel: {
     fontFamily: "inherit",
@@ -206,7 +246,7 @@ const useStyles = makeStyles({
   },
 });
 
-export function Console({ teamId, showClose, onClose }: Props) {
+export function Console({ teamId, showClose, onClose, visible = true }: Props) {
   const styles = useStyles();
   const { blocks, input, history, setInput, run, registry } = useConsole();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -215,6 +255,18 @@ export function Console({ teamId, showClose, onClose }: Props) {
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const [busy, setBusy] = useState(false);
+
+  // Auto-focus when the console becomes visible. Re-focus on every visible→true
+  // transition so the drawer behaves like a Spotlight-style overlay.
+  useEffect(() => {
+    if (!visible) return;
+    // Wait one frame so any open/close transform animation has started — the
+    // browser otherwise refuses to focus an element it considers hidden.
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [visible]);
 
   // Bump on cache update so memoised suggestions recompute synchronously.
   const [cacheVersion, setCacheVersion] = useState(0);
@@ -315,6 +367,9 @@ export function Console({ teamId, showClose, onClose }: Props) {
   const onKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      // A previous command is still running. Swallow Enter rather than
+      // queuing — and keep focus on the input so the user can keep typing.
+      if (busy) return;
       const trimmed = input.trim();
       if (!trimmed) return;
       const active = suggestions[activeSuggestion];
@@ -461,41 +516,56 @@ export function Console({ teamId, showClose, onClose }: Props) {
         ))}
       </div>
 
-      <div className={styles.inputArea}>
-        {suggestions.length > 0 && (
-          <div className={styles.suggestions}>
-            {suggestions.map((s, i) => (
-              <div
-                key={s.id}
-                ref={(el) => {
-                  suggestionRefs.current[i] = el;
-                }}
-                className={mergeClasses(
-                  styles.suggestionItem,
-                  i === activeSuggestion && styles.suggestionItemActive,
-                )}
-                onMouseEnter={() => setActiveSuggestion(i)}
-                onMouseDown={(e) => {
-                  // Use mousedown to apply BEFORE the input loses focus.
-                  e.preventDefault();
-                  applySuggestion(s);
-                }}
-              >
-                {s.icon}
-                <span className={styles.suggestionLabel}>{s.label}</span>
-                {s.hint && (
-                  <span className={styles.suggestionHint}>{s.hint}</span>
-                )}
-                {s.category && (
-                  <span className={styles.suggestionCategory}>
-                    {s.category}
-                  </span>
-                )}
-              </div>
-            ))}
+      {visible && suggestions.length > 0 && (
+        <div
+          className={styles.suggestionsOverlay}
+          role="listbox"
+          aria-label="Console suggestions"
+        >
+          {suggestions.map((s, i) => (
+            <div
+              key={s.id}
+              ref={(el) => {
+                suggestionRefs.current[i] = el;
+              }}
+              className={mergeClasses(
+                styles.suggestionItem,
+                i === activeSuggestion && styles.suggestionItemActive,
+              )}
+              role="option"
+              aria-selected={i === activeSuggestion}
+              onMouseEnter={() => setActiveSuggestion(i)}
+              onMouseDown={(e) => {
+                // Use mousedown to apply BEFORE the input loses focus.
+                e.preventDefault();
+                applySuggestion(s);
+              }}
+            >
+              {s.icon}
+              <span className={styles.suggestionLabel}>{s.label}</span>
+              {s.hint && (
+                <span className={styles.suggestionHint}>{s.hint}</span>
+              )}
+              {s.category && (
+                <span className={styles.suggestionCategory}>
+                  {s.category}
+                </span>
+              )}
+            </div>
+          ))}
+          <div className={styles.suggestionsFooter}>
+            <span>
+              <span className={styles.kbd}>↑</span>{" "}
+              <span className={styles.kbd}>↓</span> navigate{"  "}
+              <span className={styles.kbd}>Tab</span> insert{"  "}
+              <span className={styles.kbd}>Enter</span> run
+            </span>
+            <span>{suggestions.length} match{suggestions.length === 1 ? "" : "es"}</span>
           </div>
-        )}
+        </div>
+      )}
 
+      <div className={styles.inputArea}>
         <div className={styles.inputRow}>
           <ChevronRightRegular className={styles.inputPrompt} />
           <div className={styles.inputWrap}>
@@ -514,7 +584,10 @@ export function Console({ teamId, showClose, onClose }: Props) {
               onKeyDown={onKeyDown}
               spellCheck={false}
               autoComplete="off"
-              disabled={busy}
+              // Intentionally NOT `disabled={busy}` — disabling the input would
+              // strip focus and the user would have to click back in after each
+              // command. The Enter handler early-returns when busy instead.
+              aria-busy={busy}
               placeholder="Type to search apps, / for commands, ? for help"
             />
           </div>
