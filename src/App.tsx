@@ -22,6 +22,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
 import { AppsPage } from "./pages/AppsPage";
 import { ConsolePage } from "./pages/ConsolePage";
+import { NextBridgePage } from "./pages/NextBridgePage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
@@ -218,6 +219,16 @@ function AppShell() {
                 )
               }
             />
+            <Route
+              path="/bridge"
+              element={
+                currentTeam ? (
+                  <NextBridgePage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -238,6 +249,7 @@ function KeybindWiring() {
   useKeybindHandler("nav.tasks", () => navigate("/tasks"));
   useKeybindHandler("nav.apps", () => navigate("/apps"));
   useKeybindHandler("nav.permissions", () => navigate("/permissions"));
+  useKeybindHandler("nav.bridge", () => navigate("/bridge"));
   return null;
 }
 

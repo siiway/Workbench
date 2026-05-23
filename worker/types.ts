@@ -1,5 +1,6 @@
 export type Bindings = {
   KV: KVNamespace;
+  NB_HUB: DurableObjectNamespace;
   PRISM_BASE_URL?: string;
   PRISM_CLIENT_ID?: string;
   PRISM_CLIENT_SECRET?: string;

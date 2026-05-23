@@ -14,7 +14,8 @@ export type ActionId =
   | "nav.overview"
   | "nav.tasks"
   | "nav.apps"
-  | "nav.permissions";
+  | "nav.permissions"
+  | "nav.bridge";
 
 export type ActionDef = {
   id: ActionId;
@@ -56,6 +57,12 @@ export const ACTIONS: ActionDef[] = [
     label: "Go to Permissions",
     description: "Navigate to the Permissions overview.",
     defaultBinding: "g p",
+  },
+  {
+    id: "nav.bridge",
+    label: "Go to Bridge",
+    description: "Navigate to the NextBridge control panel.",
+    defaultBinding: "g b",
   },
 ];
 

@@ -13,6 +13,7 @@
 import type { ReactNode } from "react";
 import {
   AppsRegular,
+  BranchForkRegular,
   CheckmarkCircleRegular,
   CircleRegular,
   HomeRegular,
@@ -93,9 +94,52 @@ const NAV_TARGETS: { name: string; path: string; icon: ReactNode }[] = [
   { name: "overview", path: "/", icon: <HomeRegular /> },
   { name: "tasks", path: "/tasks", icon: <CheckmarkCircleRegular /> },
   { name: "apps", path: "/apps", icon: <AppsRegular /> },
+  { name: "bridge", path: "/bridge", icon: <BranchForkRegular /> },
   { name: "permissions", path: "/permissions", icon: <ShieldRegular /> },
   { name: "console", path: "/console", icon: <WindowConsoleRegular /> },
 ];
+
+// ── nextbridge helpers ─────────────────────────────────────────────────────
+
+type NbInstanceLite = { id: string; name: string };
+
+async function getFirstNbInstance(teamId: string): Promise<NbInstanceLite | null> {
+  const r = await fetch(
+    `/api/nextbridge/instances?teamId=${encodeURIComponent(teamId)}`,
+  );
+  if (!r.ok) return null;
+  const body = (await r.json()) as { instances: NbInstanceLite[] };
+  return body.instances[0] ?? null;
+}
+
+async function nbRpc<T>(
+  teamId: string,
+  instanceId: string,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<{ ok: boolean; data?: T; error?: string }> {
+  try {
+    const r = await fetch(
+      `/api/nextbridge/instances/${encodeURIComponent(
+        instanceId,
+      )}/rpc?teamId=${encodeURIComponent(teamId)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method, params }),
+      },
+    );
+    const body = (await r.json().catch(() => ({}))) as {
+      ok?: boolean;
+      data?: T;
+      error?: string;
+    };
+    if (!r.ok) return { ok: false, error: body.error ?? `HTTP ${r.status}` };
+    return { ok: body.ok ?? false, data: body.data, error: body.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 // ── commands ───────────────────────────────────────────────────────────────
 
@@ -541,7 +585,148 @@ export const commands: Command[] = [
       ctx.println(`active set → ${hit.name}`, "success");
     },
   },
+
+  // ── bridge (NextBridge) ──────────────────────────────────────────────────
+  {
+    id: "bridge.status",
+    name: "bridge",
+    aliases: ["bridge status"],
+    summary: "Show NextBridge connection status",
+    run: async (ctx) => {
+      const inst = await getFirstNbInstance(ctx.teamId);
+      if (!inst) {
+        ctx.println("No NextBridge paired in this team.", "muted");
+        return;
+      }
+      const statusR = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(
+          inst.id,
+        )}/status?teamId=${encodeURIComponent(ctx.teamId)}`,
+      );
+      if (!statusR.ok) {
+        ctx.println(`Failed: HTTP ${statusR.status}`, "error");
+        return;
+      }
+      const s = (await statusR.json()) as {
+        connected: boolean;
+        meta: { version?: string; command_prefix?: string };
+        event_buffer: number;
+      };
+      ctx.println(
+        `${inst.name}: ${s.connected ? "connected" : "disconnected"}`,
+        s.connected ? "success" : "error",
+      );
+      ctx.println(
+        `  version=${s.meta.version ?? "—"}  prefix=/${s.meta.command_prefix ?? "—"}  events=${s.event_buffer}`,
+        "muted",
+      );
+    },
+  },
+  {
+    id: "bridge.drivers",
+    name: "bridge drivers",
+    summary: "List platform drivers registered with the bridge",
+    run: async (ctx) => {
+      const inst = await getFirstNbInstance(ctx.teamId);
+      if (!inst) {
+        ctx.println("No NextBridge paired in this team.", "muted");
+        return;
+      }
+      const r = await nbRpc<{
+        drivers: Array<{ instance_id: string; platform: string | null }>;
+      }>(ctx.teamId, inst.id, "drivers.list");
+      if (!r.ok) {
+        ctx.println(`Failed: ${r.error ?? "unknown"}`, "error");
+        return;
+      }
+      const drivers = r.data?.drivers ?? [];
+      if (drivers.length === 0) {
+        ctx.println("No drivers connected.", "muted");
+        return;
+      }
+      ctx.print({
+        kind: "table",
+        columns: ["Instance", "Platform"],
+        rows: drivers.map((d) => [
+          <code key={`${d.instance_id}-i`} style={{ fontSize: 12 }}>{d.instance_id}</code>,
+          <span key={`${d.instance_id}-p`}>{d.platform ?? "—"}</span>,
+        ]),
+      });
+    },
+  },
+  {
+    id: "bridge.rules",
+    name: "bridge rules",
+    summary: "List bridging rules loaded on NextBridge",
+    run: async (ctx) => {
+      const inst = await getFirstNbInstance(ctx.teamId);
+      if (!inst) {
+        ctx.println("No NextBridge paired in this team.", "muted");
+        return;
+      }
+      const r = await nbRpc<{ rules: Array<Record<string, unknown>> }>(
+        ctx.teamId,
+        inst.id,
+        "rules.list",
+      );
+      if (!r.ok) {
+        ctx.println(`Failed: ${r.error ?? "unknown"}`, "error");
+        return;
+      }
+      const rules = r.data?.rules ?? [];
+      if (rules.length === 0) {
+        ctx.println("No rules loaded.", "muted");
+        return;
+      }
+      ctx.print({
+        kind: "table",
+        columns: ["ID", "Type", "Summary"],
+        rows: rules.map((rl, i) => [
+          <code key={`r-${i}-id`} style={{ fontSize: 12 }}>{String(rl.id ?? "")}</code>,
+          <span key={`r-${i}-t`}>{String(rl.type ?? "forward")}</span>,
+          <span key={`r-${i}-s`} style={{ fontFamily: "monospace", fontSize: 12 }}>
+            {summarizeBridgeRule(rl)}
+          </span>,
+        ]),
+      });
+    },
+  },
+  {
+    id: "bridge.reload",
+    name: "bridge reload",
+    summary: "Reload bridging rules from the NextBridge config file",
+    run: async (ctx) => {
+      const inst = await getFirstNbInstance(ctx.teamId);
+      if (!inst) {
+        ctx.println("No NextBridge paired in this team.", "muted");
+        return;
+      }
+      const r = await nbRpc<{ before: number; after: number }>(
+        ctx.teamId,
+        inst.id,
+        "rules.reload",
+      );
+      if (!r.ok) {
+        ctx.println(`Failed: ${r.error ?? "unknown"}`, "error");
+        return;
+      }
+      ctx.println(
+        `✓ rules reloaded: ${r.data?.before ?? 0} → ${r.data?.after ?? 0}`,
+        "success",
+      );
+    },
+  },
 ];
+
+function summarizeBridgeRule(rule: Record<string, unknown>): string {
+  if (rule.type === "connect") {
+    const channels = (rule.channels ?? {}) as Record<string, unknown>;
+    return `connect: ${Object.keys(channels).join(", ")}`;
+  }
+  const from = (rule.from ?? {}) as Record<string, unknown>;
+  const to = (rule.to ?? {}) as Record<string, unknown>;
+  return `${Object.keys(from).join(",") || "?"} → ${Object.keys(to).join(",") || "?"}`;
+}
 
 // ── help renderer ──────────────────────────────────────────────────────────
 

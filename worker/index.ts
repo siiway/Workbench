@@ -8,6 +8,9 @@ import settingsRoutes from "./routes/settings";
 import teamSettingsRoutes from "./routes/teamSettings";
 import appsRoutes from "./routes/apps";
 import keybindsRoutes from "./routes/keybinds";
+import nextbridgeRoutes from "./routes/nextbridge";
+
+export { NbHub } from "./durable/NbHub";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,5 +28,6 @@ app.route("/", settingsRoutes);
 app.route("/", teamSettingsRoutes);
 app.route("/", appsRoutes);
 app.route("/", keybindsRoutes);
+app.route("/", nextbridgeRoutes);
 
 export default { fetch: app.fetch };

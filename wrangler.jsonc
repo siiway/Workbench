@@ -18,6 +18,20 @@
       "id": "4225274e469a45cf8473fa55a0ace2fd"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NB_HUB",
+        "class_name": "NbHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-nb-hub",
+      "new_sqlite_classes": ["NbHub"]
+    }
+  ],
   // Optional: set these to skip the web-based init flow.
   // Sensitive values (CLIENT_SECRET) should be set via: wrangler secret put PRISM_CLIENT_SECRET
   // "vars": {
