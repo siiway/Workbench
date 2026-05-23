@@ -424,7 +424,12 @@ export function Console({ teamId, showClose, onClose, visible = true }: Props) {
     if (e.key === "Tab") {
       e.preventDefault();
       const active = suggestions[activeSuggestion];
-      if (active) applySuggestion(active, /* runIfImmediate */ false);
+      if (active) {
+        applySuggestion(active, /* runIfImmediate */ false);
+        // Defensive: setInput → re-render occasionally drops focus on the
+        // input element. Restore on the next frame so the user can keep typing.
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
       return;
     }
     if (e.key === "ArrowDown") {
