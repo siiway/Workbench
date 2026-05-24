@@ -202,6 +202,8 @@ const en = {
   bridgeRenameGroupTitle: "Rename group",
   bridgeRenameGroupHint: "Pick a display name shown in this team's chat UI. The underlying rule id stays:",
   bridgeRenameGroupField: "Display name (leave empty to reset)",
+  bridgeAttachmentNoUrl: (type: string) => `[${type}] (no URL available)`,
+  bridgeAttachmentImageBroken: "Image failed to load — open in new tab",
   bridgeComposerPlaceholder: "Send a message…",
   bridgeComposerDisconnected: "NextBridge is offline — cannot send.",
   bridgeSend: "Send",

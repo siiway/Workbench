@@ -39,10 +39,14 @@ import {
 } from "@fluentui/react-components";
 import {
   ArrowClockwiseRegular,
+  DocumentRegular,
   EditRegular,
+  ImageOffRegular,
+  MicRegular,
   PlugDisconnectedRegular,
   SendRegular,
   SettingsRegular,
+  VideoRegular,
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
@@ -89,6 +93,13 @@ type BridgeChannel = {
   peers: ChannelPeer[];
 };
 
+type ChatAttachment = {
+  type: string;   // "image" | "video" | "voice" | "file"
+  url: string;
+  name: string;
+  size: number;   // bytes; -1 when unknown
+};
+
 type ChatMessage = {
   channel_key: string;
   channel: ChannelAddress;
@@ -101,6 +112,7 @@ type ChatMessage = {
   message_id: string;
   time: string | number | null;
   self: boolean;
+  attachments: ChatAttachment[];
   recorded_at: number;
 };
 
@@ -290,6 +302,46 @@ const useStyles = makeStyles({
     background: tokens.colorBrandBackground2,
     borderRadius: tokens.borderRadiusMedium,
     padding: "6px 10px",
+  },
+  attachments: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    marginTop: "4px",
+  },
+  attachmentImage: {
+    maxWidth: "320px",
+    maxHeight: "240px",
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    cursor: "zoom-in",
+    background: tokens.colorNeutralBackground3,
+  },
+  attachmentBrokenImage: {
+    fontSize: "12px",
+    fontStyle: "italic",
+    color: tokens.colorNeutralForeground3,
+    padding: "8px 10px",
+    borderRadius: tokens.borderRadiusMedium,
+    background: tokens.colorNeutralBackground3,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  attachmentFile: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "6px 10px",
+    borderRadius: tokens.borderRadiusMedium,
+    background: tokens.colorNeutralBackground3,
+    color: tokens.colorBrandForeground1,
+    textDecoration: "none",
+    fontSize: "13px",
+    maxWidth: "320px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   composer: {
     padding: "12px 24px",
@@ -788,23 +840,42 @@ export function NextBridgePage({ teamId }: Props) {
                             <span className={styles.messageAuthor}>
                               {m.user || m.user_id || "(unknown)"}
                             </span>
-                            <span className={styles.messagePlatform}>
-                              {m.platform
-                                ? `${m.platform}${m.instance_id ? "/" + m.instance_id : ""}`
-                                : "—"}
+                            <span
+                              className={styles.messagePlatform}
+                              title={
+                                // Show full platform/instance pair on hover
+                                // for debugging without cluttering the row.
+                                m.platform && m.instance_id
+                                  ? `${m.platform} / ${m.instance_id}`
+                                  : undefined
+                              }
+                            >
+                              {m.instance_id || m.platform || "—"}
                             </span>
                             <span className={styles.messageTime}>
                               {formatTime(m.time, m.recorded_at)}
                             </span>
                           </div>
-                          <span
-                            className={mergeClasses(
-                              styles.messageText,
-                              m.self && styles.messageSelf,
-                            )}
-                          >
-                            {m.text}
-                          </span>
+                          {m.text && (
+                            <span
+                              className={mergeClasses(
+                                styles.messageText,
+                                m.self && styles.messageSelf,
+                              )}
+                            >
+                              {m.text}
+                            </span>
+                          )}
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div className={styles.attachments}>
+                              {m.attachments.map((att, ai) => (
+                                <AttachmentView
+                                  key={`${m.message_id}-att-${ai}`}
+                                  attachment={att}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))
@@ -866,6 +937,75 @@ export function NextBridgePage({ teamId }: Props) {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Render one attachment row. Images inline (with a "load failed" fallback so
+ * the user still sees the URL when the source platform's CDN blocks browser
+ * referrers); audio/video/file rendered as a link chip the user can click.
+ */
+function AttachmentView({ attachment }: { attachment: ChatAttachment }) {
+  const styles = useStyles();
+  const { t } = useI18n();
+  const [broken, setBroken] = useState(false);
+  const { type, url, name } = attachment;
+
+  if (!url) {
+    return (
+      <span className={styles.attachmentBrokenImage}>
+        <ImageOffRegular /> {t.bridgeAttachmentNoUrl(type || "file")}
+      </span>
+    );
+  }
+
+  if (type === "image" && !broken) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img
+          src={url}
+          alt={name || "image"}
+          className={styles.attachmentImage}
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      </a>
+    );
+  }
+
+  if (type === "image" && broken) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className={styles.attachmentFile}
+        title={url}
+      >
+        <ImageOffRegular /> {t.bridgeAttachmentImageBroken}
+      </a>
+    );
+  }
+
+  const icon =
+    type === "video" ? (
+      <VideoRegular />
+    ) : type === "voice" ? (
+      <MicRegular />
+    ) : (
+      <DocumentRegular />
+    );
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={styles.attachmentFile}
+      title={url}
+    >
+      {icon} {name || type || "file"}
+    </a>
   );
 }
 

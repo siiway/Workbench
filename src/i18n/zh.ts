@@ -203,6 +203,8 @@ const zh: Translations = {
   bridgeRenameGroupTitle: "重命名组",
   bridgeRenameGroupHint: "为该组在本团队聊天界面取一个显示名称。底层 rule id 不变：",
   bridgeRenameGroupField: "显示名称（留空恢复默认）",
+  bridgeAttachmentNoUrl: (type: string) => `[${type}] （未提供 URL）`,
+  bridgeAttachmentImageBroken: "图片加载失败 —— 在新标签页打开",
   bridgeComposerPlaceholder: "发送一条消息…",
   bridgeComposerDisconnected: "NextBridge 已离线，无法发送。",
   bridgeSend: "发送",

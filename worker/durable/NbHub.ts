@@ -26,6 +26,18 @@ type Frame =
 
 type EventEntry = { topic: string; data: unknown; t: number };
 
+/** A media attachment carried alongside a ChatMessage. */
+type ChatAttachment = {
+  /** "image" | "video" | "voice" | "file" — origin-platform classification. */
+  type: string;
+  /** Direct download URL. Empty when the source platform only had bytes. */
+  url: string;
+  /** Filename hint. Empty when unknown. */
+  name: string;
+  /** Size in bytes. -1 when unknown. */
+  size: number;
+};
+
 /** A chat-class event extracted from the live event stream for persistence. */
 type ChatMessage = {
   /** Stable channel key derived from the canonicalised address dict. */
@@ -44,6 +56,8 @@ type ChatMessage = {
   time: string | number | null;
   /** True when this message was authored from Workbench itself. */
   self: boolean;
+  /** Attachments sent alongside the text. Empty when text-only. */
+  attachments: ChatAttachment[];
   /** Wall-clock at the DO when we recorded it. Used for tie-break/ordering. */
   recorded_at: number;
 };
@@ -59,6 +73,22 @@ function channelKey(channel: unknown): string {
   const out: Record<string, unknown> = {};
   for (const k of sorted) out[k] = obj[k];
   return JSON.stringify(out);
+}
+
+function normalizeAttachments(raw: unknown): ChatAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    out.push({
+      type: String(a.type ?? ""),
+      url: String(a.url ?? ""),
+      name: String(a.name ?? ""),
+      size: typeof a.size === "number" ? a.size : Number(a.size ?? -1) || -1,
+    });
+  }
+  return out;
 }
 
 // Memory-only across DO invocations. Hibernation may drop these — that's OK,
@@ -378,6 +408,7 @@ export class NbHub {
       message_id: String(data.message_id ?? ""),
       time: (data.time as string | number | null | undefined) ?? null,
       self: Boolean(data.self),
+      attachments: normalizeAttachments(data.attachments),
       recorded_at: t,
     };
   }
