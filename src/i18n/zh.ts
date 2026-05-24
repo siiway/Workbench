@@ -8,7 +8,7 @@ const zh: Translations = {
   sessionExpiredSignIn: "登录",
 
   // Sidebar
-  appName: "Siiway Workbench",
+  appName: "SiiWay Workbench",
   navOverview: "概览",
   navTasks: "任务",
   navApps: "应用",

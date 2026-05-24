@@ -35,6 +35,9 @@ type ChatMessage = {
   text: string;
   user: string;
   user_id: string;
+  /** Avatar URL when the source driver populated it (or, for QQ, derived
+   *  from the qlogo.cn endpoint by NextBridge). Empty string when unknown. */
+  user_avatar: string;
   platform: string;
   instance_id: string;
   message_id: string;
@@ -369,6 +372,7 @@ export class NbHub {
       text: String(data.text ?? ""),
       user: String(data.user ?? ""),
       user_id: String(data.user_id ?? ""),
+      user_avatar: String(data.user_avatar ?? ""),
       platform: String(data.platform ?? ""),
       instance_id: String(data.instance_id ?? ""),
       message_id: String(data.message_id ?? ""),

@@ -95,6 +95,7 @@ type ChatMessage = {
   text: string;
   user: string;
   user_id: string;
+  user_avatar: string;
   platform: string;
   instance_id: string;
   message_id: string;
@@ -778,6 +779,7 @@ export function NextBridgePage({ teamId }: Props) {
                       >
                         <Avatar
                           name={m.user || m.user_id}
+                          image={m.user_avatar ? { src: m.user_avatar } : undefined}
                           size={28}
                           aria-label={m.user}
                         />

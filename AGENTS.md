@@ -1,9 +1,9 @@
-# AI Agent Guidelines for Siiway Workbench
+# AI Agent Guidelines for SiiWay Workbench
 
-This document provides context and guidelines for AI coding assistants working on the Siiway Workbench project.
+This document provides context and guidelines for AI coding assistants working on the SiiWay Workbench project.
 
 ## Core Architecture
-Siiway Workbench is a web-based dashboard utilizing a dual-stack architecture within a single repository:
+SiiWay Workbench is a web-based dashboard utilizing a dual-stack architecture within a single repository:
 - **Frontend**: React SPA managed by Vite.
 - **Backend**: Cloudflare Worker using Hono.
 - **State Storage**: Cloudflare KV (for settings, initialization config, app registry, keybinds, and auth sessions).

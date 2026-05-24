@@ -1,14 +1,14 @@
-# Siiway Workbench
+# SiiWay Workbench
 
-A centralized workspace dashboard built with React and Cloudflare Workers, integrating with Siiway Prism for authentication and Siiway Glint for task management.
+A centralized workspace dashboard built with React and Cloudflare Workers, integrating with SiiWay Prism for authentication and SiiWay Glint for task management.
 
 ## Tech Stack
 
 - **Frontend:** React 19, Vite, React Router, Fluent UI React v9 (`@fluentui/react-components`), Zustand
 - **Backend:** Hono, Cloudflare Workers
 - **Database / Storage:** Cloudflare KV
-- **Authentication:** Siiway Prism (OAuth 2.0 / OpenID Connect)
-- **Task Management API:** Siiway Glint
+- **Authentication:** SiiWay Prism (OAuth 2.0 / OpenID Connect)
+- **Task Management API:** SiiWay Glint
 
 ## Project Structure
 

@@ -46,7 +46,7 @@ export function LoginPage() {
     <div className={styles.container}>
       <Card className={styles.card}>
         <CardHeader image={<GridDots24Regular className={styles.icon} />} />
-        <Title1 className={styles.title}>Siiway Workbench</Title1>
+        <Title1 className={styles.title}>SiiWay Workbench</Title1>
         <Body1 className={styles.subtitle}>
           Sign in to access your team workbench.
         </Body1>

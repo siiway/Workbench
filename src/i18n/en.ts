@@ -6,7 +6,7 @@ const en = {
   sessionExpiredSignIn: "Sign in",
 
   // Sidebar
-  appName: "Siiway Workbench",
+  appName: "SiiWay Workbench",
   navOverview: "Overview",
   navTasks: "Tasks",
   navApps: "Apps",

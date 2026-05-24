@@ -413,13 +413,15 @@ nb.post("/api/nextbridge/instances/:id/chat/send", requireAuth, async (c) => {
   }
 
   // Identify the Workbench user to the NextBridge side. We pass username +
-  // display name so other platforms can render the author.
+  // display name + avatar so other platforms can render the author and the
+  // local /bridge chat log can show the same avatar on self-echoed messages.
   const session = c.get("session");
   const params = {
     channel: body.channel,
     text,
     user: session.displayName || session.username,
     user_id: session.userId,
+    user_avatar: session.avatarUrl ?? "",
   };
 
   const resp = await hubStub(c.env, access.teamId, access.id).fetch(
