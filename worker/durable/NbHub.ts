@@ -138,8 +138,10 @@ export class NbHub {
   }
 
   /** Returns true iff at least one hibernated WS is currently attached. */
+  /** True iff the NextBridge control connection is attached. Frontend
+   *  subscribers don't count — they can't service RPCs. */
   private hasSocket(): boolean {
-    return this.state.getWebSockets().length > 0;
+    return this.state.getWebSockets("nextbridge").length > 0;
   }
 
   // ---------------------------------------------------------------------
@@ -287,7 +289,10 @@ export class NbHub {
 
     const id = crypto.randomUUID();
     const frame: Frame = { kind: "req", id, method, params: body.params };
-    const sockets = this.state.getWebSockets();
+    // CRITICAL: filter to the NextBridge control connection. Without the
+    // tag the array also includes frontend subscribers — sending an RPC
+    // frame to a browser tab makes it disappear and we time out at 15s.
+    const sockets = this.state.getWebSockets("nextbridge");
     if (sockets.length === 0) {
       return Response.json(
         { ok: false, error: "NextBridge socket missing" },
