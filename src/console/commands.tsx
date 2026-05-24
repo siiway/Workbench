@@ -766,7 +766,27 @@ function HelpOutput({ commands }: { commands: Command[] }) {
   );
 }
 
+// Defence-in-depth on top of the worker-side check in routes/apps.ts:
+// any legacy KV row created before that landed could still hold a non-
+// http(s) URL (`javascript:`, `data:`, etc.). Refusing to render such
+// URLs as a link prevents a stored XSS from one rogue owner taking over
+// a team member's session via click.
+const SAFE_LINK_RE = /^https?:\/\//i;
+function isSafeAppHref(url: string): boolean {
+  return typeof url === "string" && SAFE_LINK_RE.test(url);
+}
+
 function AppLink({ app }: { app: AppCard }) {
+  if (!isSafeAppHref(app.url)) {
+    return (
+      <span
+        style={{ color: "var(--colorNeutralForeground3)" }}
+        title={app.url}
+      >
+        {app.name} (unsafe URL)
+      </span>
+    );
+  }
   return (
     <a
       href={app.url}

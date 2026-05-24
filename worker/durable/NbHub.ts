@@ -243,7 +243,7 @@ export class NbHub {
     return Response.json({ ok: true });
   }
 
-  private acceptWebSocket(_req: Request, role: "nextbridge" | "frontend"): Response {
+  private acceptWebSocket(req: Request, role: "nextbridge" | "frontend"): Response {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
@@ -252,9 +252,14 @@ export class NbHub {
     // The tag lets us route fan-out (frontend subscribers) without confusing
     // them with the NextBridge control connection.
     this.state.acceptWebSocket(server, [role]);
-    // Attachment survives hibernation, so webSocketMessage can tell which
-    // side a frame came from without re-checking tags.
-    server.serializeAttachment({ role });
+    // Carry the (teamId, instanceId) bound to this token forward in the
+    // socket attachment so the hello handler can verify the NextBridge
+    // process claims the right identity. Survives hibernation.
+    server.serializeAttachment({
+      role,
+      expected_instance: req.headers.get("X-Nb-Expected-Instance") ?? "",
+      team_id: req.headers.get("X-Nb-Team") ?? "",
+    });
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -349,16 +354,61 @@ export class NbHub {
       return; // ignore malformed frames
     }
 
+    const sockMeta = _ws.deserializeAttachment() as {
+      role: string;
+      expected_instance?: string;
+      team_id?: string;
+    } | null;
+
     switch (frame.kind) {
       case "hello": {
+        const claimed = (frame.instance_id ?? "").trim();
+        const expected = sockMeta?.expected_instance ?? "";
+        // Token already bound to (teamId, instanceId) when the route looked
+        // it up — verify NextBridge claims the same id. A mismatch means
+        // either the config on the NextBridge host points at a different
+        // instance, or someone is replaying a token issued for another
+        // pairing. Reject both.
+        if (!expected || claimed !== expected) {
+          try {
+            _ws.send(
+              JSON.stringify({
+                kind: "hello.ack",
+                ok: false,
+                error: "instance_id mismatch",
+              }),
+            );
+          } catch {
+            // best-effort; close anyway
+          }
+          try {
+            _ws.close(1008, "instance_id mismatch");
+          } catch {
+            // ignore
+          }
+          return;
+        }
+
         this.meta = {
-          instance_id: frame.instance_id,
+          instance_id: claimed,
           instance_name: frame.instance_name,
           version: frame.version,
           command_prefix: frame.command_prefix,
           connected_at: Date.now(),
         };
         await this.state.storage.put("meta", this.meta);
+        try {
+          _ws.send(
+            JSON.stringify({
+              kind: "hello.ack",
+              ok: true,
+              instance_id: claimed,
+              team_id: sockMeta?.team_id ?? "",
+            }),
+          );
+        } catch {
+          // ignore — NB will time out waiting for ack and reconnect
+        }
         return;
       }
       case "res": {

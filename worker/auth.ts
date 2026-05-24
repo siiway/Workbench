@@ -9,6 +9,26 @@ export const SESSION_RENEW_WINDOW_SECONDS = 30 * 60;
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 /**
+ * Absolute session lifetime ceiling. A session is hard-killed exactly this
+ * many ms after `createdAt`, regardless of activity-driven renewals. Forces
+ * a fresh Prism login every week so revoked Prism permissions (team
+ * removal, account disable) propagate within a bounded window even if the
+ * user keeps the tab open.
+ */
+export const ABSOLUTE_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Treat legacy sessions (no createdAt) as having started 1 day before
+ *  their soft expiry — close enough; they'll roll over to the new model
+ *  on next renewal or login. */
+function sessionCreatedAt(session: { createdAt?: number; expiresAt: number }): number {
+  return session.createdAt ?? session.expiresAt - 24 * 60 * 60 * 1000;
+}
+
+export function sessionAbsolutelyExpired(session: { createdAt?: number; expiresAt: number }): boolean {
+  return Date.now() - sessionCreatedAt(session) >= ABSOLUTE_SESSION_LIFETIME_MS;
+}
+
+/**
  * Workbench requests Glint's `workbench` bundle scope, which authorises every
  * cross-app endpoint Glint exposes. Equivalent to granting the full granular
  * scope set; the bundle exists specifically to keep Workbench's OAuth consent
@@ -67,12 +87,26 @@ export async function renewSessionIfExpiring(
   if (session.expiresAt - Date.now() > SESSION_RENEW_WINDOW_SECONDS * 1000) {
     return { session, renewed: false };
   }
+  // Refuse to renew past the absolute lifetime ceiling — the requireAuth
+  // path will see the unrenewed session, find it absolutely expired, and
+  // bounce the caller to /login.
+  if (sessionAbsolutelyExpired(session)) {
+    return { session, renewed: false };
+  }
+  // Don't push expiresAt past the absolute ceiling either.
+  const cap =
+    sessionCreatedAt(session) + ABSOLUTE_SESSION_LIFETIME_MS;
+  const candidate = Date.now() + SESSION_MIN_TTL_SECONDS * 1000;
   const renewedSession: SessionData = {
     ...session,
-    expiresAt: Date.now() + SESSION_MIN_TTL_SECONDS * 1000,
+    expiresAt: Math.min(candidate, cap),
   };
+  const kvTtlSeconds = Math.max(
+    1,
+    Math.ceil((renewedSession.expiresAt - Date.now()) / 1000),
+  );
   await kv.put(`session:${sessionId}`, JSON.stringify(renewedSession), {
-    expirationTtl: SESSION_MIN_TTL_SECONDS,
+    expirationTtl: kvTtlSeconds,
   });
   return { session: renewedSession, renewed: true };
 }
@@ -119,6 +153,13 @@ export const requireAuth = createMiddleware<{
 
   const session = cached as SessionData;
   if (Date.now() > session.expiresAt) {
+    await c.env.KV.delete(`session:${sessionId}`);
+    deleteCookie(c, "session");
+    return c.json({ error: "Session expired" }, 401);
+  }
+  // Absolute ceiling — even if soft expiry would be extended by activity,
+  // the session is hard-killed once created+1week.
+  if (sessionAbsolutelyExpired(session)) {
     await c.env.KV.delete(`session:${sessionId}`);
     deleteCookie(c, "session");
     return c.json({ error: "Session expired" }, 401);

@@ -999,17 +999,34 @@ export function NextBridgePage({ teamId }: Props) {
 }
 
 /**
+ * Schemes we'll render as a clickable link / loadable image. Everything else
+ * (`javascript:`, `data:`, `file:`, unknown) is treated as if the URL were
+ * missing — keeps a malicious or bugged upstream driver from injecting XSS
+ * through an `<a href>` that React's default escaping does NOT block.
+ */
+const SAFE_URL_RE = /^https?:\/\//i;
+
+function isSafeUrl(url: string): boolean {
+  return typeof url === "string" && SAFE_URL_RE.test(url) && url.length < 4096;
+}
+
+/**
  * Render one attachment row. Images inline (with a "load failed" fallback so
  * the user still sees the URL when the source platform's CDN blocks browser
  * referrers); audio/video/file rendered as a link chip the user can click.
+ *
+ * URL safety: every render path goes through `isSafeUrl` so a malicious
+ * `javascript:` / `data:` URL coming through the bridge can't be clicked
+ * into executing code in this tab.
  */
 function AttachmentView({ attachment }: { attachment: ChatAttachment }) {
   const styles = useStyles();
   const { t } = useI18n();
   const [broken, setBroken] = useState(false);
   const { type, url, name } = attachment;
+  const safe = isSafeUrl(url);
 
-  if (!url) {
+  if (!safe) {
     return (
       <span className={styles.attachmentBrokenImage}>
         <ImageOffRegular /> {t.bridgeAttachmentNoUrl(type || "file")}

@@ -445,6 +445,23 @@ nb.get("/api/nextbridge/instances/:id/stream", requireAuth, async (c) => {
   if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
     return c.json({ error: "websocket upgrade required" }, 426);
   }
+  // Defence-in-depth: require Origin to match Host. SameSite=Lax already
+  // blocks most CSRF-driven WS connections, but an explicit check stops
+  // mixed-origin embedding (e.g. an iframe on a third-party site doing a
+  // top-level navigation to our domain via a misconfigured intermediary).
+  const origin = c.req.header("Origin") ?? "";
+  const host = c.req.header("Host") ?? "";
+  if (origin) {
+    let originHost = "";
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      originHost = "";
+    }
+    if (!originHost || originHost !== host) {
+      return c.json({ error: "Forbidden origin" }, 403);
+    }
+  }
   const access = await requireInstanceAccess(c);
   if (access instanceof Response) return access;
 
@@ -476,8 +493,13 @@ nb.get("/api/nextbridge/relay", async (c) => {
   );
   if (!lookup) return c.json({ error: "invalid token" }, 401);
 
-  // Stub to the DO; it accepts the WS upgrade and returns 101.
-  return hubStub(c.env, lookup.teamId, lookup.instanceId).fetch(c.req.raw);
+  // Hand the DO the expected (teamId, instanceId) so its hello handler
+  // can verify NextBridge claims the right identity in the handshake.
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("X-Nb-Expected-Instance", lookup.instanceId);
+  headers.set("X-Nb-Team", lookup.teamId);
+  const upstream = new Request(c.req.raw, { headers });
+  return hubStub(c.env, lookup.teamId, lookup.instanceId).fetch(upstream);
 });
 
 export default nb;

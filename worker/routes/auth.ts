@@ -118,6 +118,7 @@ auth.post("/api/auth/callback", async (c) => {
 
   const ttl = resolveSessionTtl(config.session_ttl, tokens.expires_in);
   const sessionId = crypto.randomUUID();
+  const now = Date.now();
 
   const session: SessionData = {
     userId: userInfo.sub,
@@ -126,10 +127,12 @@ auth.post("/api/auth/callback", async (c) => {
     avatarUrl: userInfo.picture,
     accessToken: tokens.access_token,
     accessTokenExpiresAt: tokens.expires_in
-      ? Date.now() + tokens.expires_in * 1000
+      ? now + tokens.expires_in * 1000
       : undefined,
     refreshToken: tokens.refresh_token,
-    expiresAt: Date.now() + ttl * 1000,
+    expiresAt: now + ttl * 1000,
+    // Hard ceiling anchor; see ABSOLUTE_SESSION_LIFETIME_MS in worker/auth.ts.
+    createdAt: now,
     teams,
   };
 

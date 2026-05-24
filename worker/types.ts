@@ -7,6 +7,14 @@ export type Bindings = {
   PRISM_REDIRECT_URI?: string;
   GLINT_BASE_URL?: string;
   GLINT_CLIENT_ID?: string;
+  /**
+   * Optional Prism team id whose owners / co-owners are the only ones
+   * allowed to read / write global Workbench settings. When unset, falls
+   * back to "any team owner/co-owner" — keep unset for new deployments
+   * during bootstrap, then set once the admin team exists to lock down
+   * cross-team privilege escalation. See WB-CRIT-B in the audit.
+   */
+  WORKBENCH_ADMIN_TEAM_ID?: string;
 };
 
 export type AppConfig = {
@@ -63,7 +71,16 @@ export type SessionData = {
   accessToken: string;
   accessTokenExpiresAt?: number;
   refreshToken?: string;
+  /** Soft expiry — extended by activity via renewSessionIfExpiring. */
   expiresAt: number;
+  /**
+   * Wall-clock at first login. Hard ceiling on session lifetime:
+   * `requireAuth` rejects sessions older than ABSOLUTE_SESSION_LIFETIME_MS
+   * regardless of activity, forcing a fresh Prism login. Optional for
+   * forward compatibility with cookies issued before this field was added
+   * — those are treated as "created at session.expiresAt - 1 day".
+   */
+  createdAt?: number;
   teams: TeamInfo[];
 };
 
