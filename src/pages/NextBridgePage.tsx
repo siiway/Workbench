@@ -577,11 +577,70 @@ export function NextBridgePage({ teamId }: Props) {
     void fetchMessages();
   }, [fetchMessages]);
 
+  // Live update channel. Open a WS to the DO; on each chat.inbound frame,
+  // dedupe by message_id and append. Replaces the previous 3-second poll —
+  // see DO `broadcastChat` for the server side. Reconnects with backoff if
+  // the socket drops (DO eviction / Cloudflare maintenance).
   useEffect(() => {
     if (!instanceId || !activeKey) return;
-    const id = setInterval(() => void fetchMessages(), 3000);
-    return () => clearInterval(id);
-  }, [instanceId, activeKey, fetchMessages]);
+
+    let closed = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    const connect = () => {
+      if (closed) return;
+      const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+      const url = `${scheme}://${window.location.host}/api/nextbridge/instances/${encodeURIComponent(
+        instanceId,
+      )}/stream?teamId=${encodeURIComponent(teamId)}`;
+      ws = new WebSocket(url);
+      ws.onopen = () => {
+        attempt = 0;
+      };
+      ws.onmessage = (ev) => {
+        let frame: { kind?: string; message?: ChatMessage } | null = null;
+        try {
+          frame = JSON.parse(typeof ev.data === "string" ? ev.data : "");
+        } catch {
+          return;
+        }
+        if (!frame || frame.kind !== "chat.inbound" || !frame.message) return;
+        const incoming = frame.message;
+        // Only append if it matches the channel the user is currently viewing.
+        if (incoming.channel_key !== activeKey) return;
+        setMessages((prev) => {
+          if (!prev) return [incoming];
+          // Dedupe by message_id in case the initial fetch and a live event
+          // both reference the same row (happens on quick re-mounts).
+          if (incoming.message_id && prev.some((m) => m.message_id === incoming.message_id)) {
+            return prev;
+          }
+          return [...prev, incoming];
+        });
+      };
+      ws.onclose = () => {
+        if (closed) return;
+        // Exponential backoff capped at 30s. First retry after ~1s, then
+        // 2s, 4s, 8s, 16s, 30s.
+        attempt += 1;
+        const delay = Math.min(30000, 1000 * Math.pow(2, attempt - 1));
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      ws.onerror = () => {
+        // onclose will fire right after, let it handle the reconnect.
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [instanceId, activeKey, teamId]);
 
   // Auto-scroll the log when new messages arrive.
   useEffect(() => {
@@ -618,9 +677,8 @@ export function NextBridgePage({ teamId }: Props) {
         throw new Error(body.error ?? `HTTP ${r.status}`);
       }
       setComposer("");
-      // Refresh messages so the echo arrives quickly (driver buffers it as
-      // chat.inbound, which the DO persists).
-      void fetchMessages();
+      // No manual refetch needed — chat.send echoes a chat.inbound event
+      // back through the DO broadcast, which the live WS subscriber appends.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

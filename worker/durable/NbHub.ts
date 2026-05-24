@@ -151,7 +151,15 @@ export class NbHub {
     const action = url.pathname.split("/").filter(Boolean).pop() ?? "";
 
     if (req.headers.get("Upgrade")?.toLowerCase() === "websocket") {
-      return this.acceptWebSocket(req);
+      // Two flavours of WS terminate here:
+      //   - NextBridge dialing in via /relay (tag: "nextbridge", RPC + events)
+      //   - Workbench frontend subscribing via /stream (tag: "frontend",
+      //     read-only push of chat.inbound events)
+      // The sibling route sets X-Nb-Role to disambiguate.
+      const role = req.headers.get("X-Nb-Role") === "frontend"
+        ? "frontend"
+        : "nextbridge";
+      return this.acceptWebSocket(req, role);
     }
 
     switch (action) {
@@ -233,13 +241,18 @@ export class NbHub {
     return Response.json({ ok: true });
   }
 
-  private acceptWebSocket(_req: Request): Response {
+  private acceptWebSocket(_req: Request, role: "nextbridge" | "frontend"): Response {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
     // Hibernation-friendly: the runtime restores the socket and our handlers
     // (webSocketMessage / webSocketClose) automatically on cold starts.
-    this.state.acceptWebSocket(server);
+    // The tag lets us route fan-out (frontend subscribers) without confusing
+    // them with the NextBridge control connection.
+    this.state.acceptWebSocket(server, [role]);
+    // Attachment survives hibernation, so webSocketMessage can tell which
+    // side a frame came from without re-checking tags.
+    server.serializeAttachment({ role });
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -313,6 +326,11 @@ export class NbHub {
   // ---------------------------------------------------------------------
 
   async webSocketMessage(_ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    // Frontend subscribers are read-only. They might send keepalive pings or
+    // garbage; just drop anything they say.
+    const meta = _ws.deserializeAttachment() as { role?: string } | null;
+    if (meta?.role === "frontend") return;
+
     let text: string;
     if (typeof raw === "string") {
       text = raw;
@@ -370,6 +388,10 @@ export class NbHub {
             );
           }
           await this.state.storage.put("chat_messages", this.chatMessages);
+
+          // Fan out to every currently-attached frontend subscriber. Replaces
+          // the old setInterval poll in NextBridgePage.
+          this.broadcastChat(msg);
         }
         return;
       }
@@ -385,6 +407,17 @@ export class NbHub {
         return;
       default:
         return;
+    }
+  }
+
+  private broadcastChat(msg: ChatMessage): void {
+    const payload = JSON.stringify({ kind: "chat.inbound", message: msg });
+    for (const ws of this.state.getWebSockets("frontend")) {
+      try {
+        ws.send(payload);
+      } catch {
+        // Subscriber died mid-send; the close handler will collect it later.
+      }
     }
   }
 
@@ -419,7 +452,12 @@ export class NbHub {
     reason: string,
     _wasClean: boolean,
   ): Promise<void> {
-    // Reject any pending RPCs so callers don't hang until timeout.
+    // Only the NextBridge control connection owns pending RPCs. A frontend
+    // subscriber closing (tab navigated away, network blip) shouldn't fail
+    // RPCs that may still resolve via the other socket.
+    const meta = _ws.deserializeAttachment() as { role?: string } | null;
+    if (meta?.role === "frontend") return;
+
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.resolve({ ok: false, error: `socket closed (${code}) ${reason}` });
@@ -428,7 +466,9 @@ export class NbHub {
   }
 
   async webSocketError(_ws: WebSocket, _err: unknown): Promise<void> {
-    // Same as close — drop pending RPCs.
+    const meta = _ws.deserializeAttachment() as { role?: string } | null;
+    if (meta?.role === "frontend") return;
+
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.resolve({ ok: false, error: "socket error" });

@@ -437,6 +437,26 @@ nb.post("/api/nextbridge/instances/:id/chat/send", requireAuth, async (c) => {
   });
 });
 
+// ── Frontend stream (session-authenticated) ────────────────────────────────
+// Tabs open this WS to receive chat.inbound events in real time, replacing
+// the previous setInterval poll. Initial backlog still comes from the
+// /messages REST endpoint to avoid sending it twice on every reconnect.
+nb.get("/api/nextbridge/instances/:id/stream", requireAuth, async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
+    return c.json({ error: "websocket upgrade required" }, 426);
+  }
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+
+  // Stub the upgrade into the DO. We tag the request with X-Nb-Role so the
+  // DO knows this is a frontend subscriber, not the NextBridge control link.
+  // Build the headers fresh because Request.headers is immutable post-construction.
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("X-Nb-Role", "frontend");
+  const upstream = new Request(c.req.raw, { headers });
+  return hubStub(c.env, access.teamId, access.id).fetch(upstream);
+});
+
 // ── WS relay entry (token-authenticated) ───────────────────────────────────
 
 nb.get("/api/nextbridge/relay", async (c) => {
