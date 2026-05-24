@@ -26,8 +26,37 @@ type Frame =
 
 type EventEntry = { topic: string; data: unknown; t: number };
 
+/** A chat-class event extracted from the live event stream for persistence. */
+type ChatMessage = {
+  /** Stable channel key derived from the canonicalised address dict. */
+  channel_key: string;
+  /** Original channel address (whatever the NextBridge driver sent up). */
+  channel: Record<string, unknown>;
+  text: string;
+  user: string;
+  user_id: string;
+  platform: string;
+  instance_id: string;
+  message_id: string;
+  time: string | number | null;
+  /** True when this message was authored from Workbench itself. */
+  self: boolean;
+  /** Wall-clock at the DO when we recorded it. Used for tie-break/ordering. */
+  recorded_at: number;
+};
+
 const EVENT_BUFFER_SIZE = 200;
+const CHAT_BUFFER_SIZE = 1000;
 const RPC_TIMEOUT_MS = 15_000;
+
+function channelKey(channel: unknown): string {
+  if (!channel || typeof channel !== "object") return "";
+  const obj = channel as Record<string, unknown>;
+  const sorted = Object.keys(obj).sort();
+  const out: Record<string, unknown> = {};
+  for (const k of sorted) out[k] = obj[k];
+  return JSON.stringify(out);
+}
 
 // Memory-only across DO invocations. Hibernation may drop these — that's OK,
 // the next RPC will time out and the caller can retry. The WS socket itself
@@ -42,6 +71,13 @@ export class NbHub {
   private env: Bindings;
   private pending: Map<string, PendingRpc> = new Map();
   private events: EventEntry[] = [];
+  private chatMessages: ChatMessage[] = [];
+  /**
+   * Per-rule custom display names assigned by team members. Keyed by
+   * rule_id → display string. Used to override the default `rule_id`
+   * label in the chat UI. Default empty; survives DO eviction via storage.
+   */
+  private groupNames: Record<string, string> = {};
   private meta: {
     instance_id?: string;
     instance_name?: string;
@@ -54,10 +90,16 @@ export class NbHub {
     this.state = state;
     this.env = env;
     void this.env; // currently unused but kept for future per-DO config lookups
-    // Restore events buffer from storage on cold start.
+    // Restore events + chat buffers + group names from storage on cold start.
     this.state.blockConcurrencyWhile(async () => {
       const stored = (await this.state.storage.get<EventEntry[]>("events")) ?? [];
       this.events = stored;
+      const chat =
+        (await this.state.storage.get<ChatMessage[]>("chat_messages")) ?? [];
+      this.chatMessages = chat;
+      this.groupNames =
+        (await this.state.storage.get<Record<string, string>>("group_names")) ??
+        {};
       this.meta = (await this.state.storage.get<typeof this.meta>("meta")) ?? {};
     });
   }
@@ -86,6 +128,11 @@ export class NbHub {
         return Response.json({
           events: this.events.slice(-Number(url.searchParams.get("limit") ?? 100)),
         });
+      case "messages":
+        return Response.json(this.listMessages(url));
+      case "group-names":
+        if (req.method === "PUT") return this.putGroupNames(req);
+        return Response.json({ names: this.groupNames });
       case "rpc":
         return this.handleRpc(req);
       case "disconnect":
@@ -95,13 +142,51 @@ export class NbHub {
     }
   }
 
+  private async putGroupNames(req: Request): Promise<Response> {
+    let body: { names?: unknown };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return Response.json({ ok: false, error: "invalid JSON" }, { status: 400 });
+    }
+    if (!body.names || typeof body.names !== "object") {
+      return Response.json(
+        { ok: false, error: "`names` must be an object" },
+        { status: 400 },
+      );
+    }
+    // Coerce to a clean Record<string, string>, dropping empties.
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body.names as Record<string, unknown>)) {
+      const key = String(k).trim();
+      if (!key) continue;
+      const val = typeof v === "string" ? v.trim() : "";
+      if (val) next[key] = val;
+    }
+    this.groupNames = next;
+    await this.state.storage.put("group_names", next);
+    return Response.json({ ok: true, names: next });
+  }
+
   private status() {
     return {
       connected: this.hasSocket(),
       meta: this.meta,
       pending_rpcs: this.pending.size,
       event_buffer: this.events.length,
+      chat_buffer: this.chatMessages.length,
     };
+  }
+
+  private listMessages(url: URL): { messages: ChatMessage[] } {
+    const limit = Math.max(
+      1,
+      Math.min(Number(url.searchParams.get("limit") ?? CHAT_BUFFER_SIZE), CHAT_BUFFER_SIZE),
+    );
+    const channel = url.searchParams.get("channel"); // canonical key string
+    let pool = this.chatMessages;
+    if (channel) pool = pool.filter((m) => m.channel_key === channel);
+    return { messages: pool.slice(-limit) };
   }
 
   private async disconnectSockets(): Promise<Response> {
@@ -238,8 +323,21 @@ export class NbHub {
         if (this.events.length > EVENT_BUFFER_SIZE) {
           this.events.splice(0, this.events.length - EVENT_BUFFER_SIZE);
         }
-        // Persist asynchronously; OK if it lags slightly.
         await this.state.storage.put("events", this.events);
+
+        // Persist chat messages separately so the /bridge page can render a
+        // longer scrollback than the all-events ring buffer would hold.
+        if (frame.topic === "chat.inbound" && this.isChatPayload(frame.data)) {
+          const msg = this.toChatMessage(frame.data, entry.t);
+          this.chatMessages.push(msg);
+          if (this.chatMessages.length > CHAT_BUFFER_SIZE) {
+            this.chatMessages.splice(
+              0,
+              this.chatMessages.length - CHAT_BUFFER_SIZE,
+            );
+          }
+          await this.state.storage.put("chat_messages", this.chatMessages);
+        }
         return;
       }
       case "ping": {
@@ -255,6 +353,29 @@ export class NbHub {
       default:
         return;
     }
+  }
+
+  private isChatPayload(data: unknown): data is Record<string, unknown> {
+    if (!data || typeof data !== "object") return false;
+    const d = data as Record<string, unknown>;
+    return typeof d.text === "string" && d.channel !== undefined;
+  }
+
+  private toChatMessage(data: Record<string, unknown>, t: number): ChatMessage {
+    const ch = (data.channel ?? {}) as Record<string, unknown>;
+    return {
+      channel_key: channelKey(ch),
+      channel: ch,
+      text: String(data.text ?? ""),
+      user: String(data.user ?? ""),
+      user_id: String(data.user_id ?? ""),
+      platform: String(data.platform ?? ""),
+      instance_id: String(data.instance_id ?? ""),
+      message_id: String(data.message_id ?? ""),
+      time: (data.time as string | number | null | undefined) ?? null,
+      self: Boolean(data.self),
+      recorded_at: t,
+    };
   }
 
   async webSocketClose(

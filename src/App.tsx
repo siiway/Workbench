@@ -23,6 +23,7 @@ import { PermissionsPage } from "./pages/PermissionsPage";
 import { AppsPage } from "./pages/AppsPage";
 import { ConsolePage } from "./pages/ConsolePage";
 import { NextBridgePage } from "./pages/NextBridgePage";
+import { NextBridgeConfigPage } from "./pages/NextBridgeConfigPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
@@ -224,6 +225,16 @@ function AppShell() {
               element={
                 currentTeam ? (
                   <NextBridgePage teamId={currentTeam} />
+                ) : (
+                  <Navigate to="/teams" replace />
+                )
+              }
+            />
+            <Route
+              path="/bridge/config"
+              element={
+                currentTeam ? (
+                  <NextBridgeConfigPage teamId={currentTeam} />
                 ) : (
                   <Navigate to="/teams" replace />
                 )

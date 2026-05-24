@@ -1,6 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+/**
+ * /bridge — the chat page that every team member can use.
+ *
+ * Layout: channel list (left), message log (center), composer (bottom).
+ * The list of channels is derived from the NextBridge rules file (any rule
+ * mentioning the paired Workbench instance contributes a channel). Messages
+ * are persisted server-side in the NbHub Durable Object (1000-entry ring
+ * per instance); on open we fetch the persisted tail and poll for updates.
+ *
+ * The configuration surface (status, drivers, rules table, pair/revoke)
+ * lives at /bridge/config and is gated to admin / co-owner / owner via the
+ * Worker route's canManage check.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Badge,
+  Avatar,
   Body1,
   Body2,
   Button,
@@ -11,32 +25,26 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  DialogTrigger,
   Field,
   Input,
   MessageBar,
   MessageBarBody,
   Spinner,
   Subtitle1,
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableHeaderCell,
-  TableRow,
+  Textarea,
   Title2,
   makeStyles,
+  mergeClasses,
   tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular,
   ArrowClockwiseRegular,
-  CheckmarkCircleRegular,
-  CopyRegular,
-  DeleteRegular,
-  DismissCircleRegular,
+  EditRegular,
   PlugDisconnectedRegular,
+  SendRegular,
+  SettingsRegular,
 } from "@fluentui/react-icons";
+import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 
 type Instance = {
@@ -63,117 +71,347 @@ type StatusResponse = {
   };
   pending_rpcs: number;
   event_buffer: number;
+  chat_buffer: number;
 };
 
-type EventEntry = {
-  topic: string;
-  data: unknown;
-  t: number;
+type ChannelAddress = Record<string, unknown>;
+
+type ChannelPeer = {
+  instance_id: string;
+  platform: string;
+  address: ChannelAddress;
 };
 
-type RpcResult<T> = { ok: boolean; data?: T; error?: string };
+type BridgeChannel = {
+  rule_id: string;
+  rule_type: string;
+  address: ChannelAddress;
+  peers: ChannelPeer[];
+};
+
+type ChatMessage = {
+  channel_key: string;
+  channel: ChannelAddress;
+  text: string;
+  user: string;
+  user_id: string;
+  platform: string;
+  instance_id: string;
+  message_id: string;
+  time: string | number | null;
+  self: boolean;
+  recorded_at: number;
+};
 
 const useStyles = makeStyles({
-  pageScroll: { height: "100%", overflowY: "auto", boxSizing: "border-box" },
-  page: {
-    padding: "24px 32px",
-    boxSizing: "border-box",
-    maxWidth: "1080px",
-    width: "100%",
-    margin: "0 auto",
+  root: {
+    height: "100%",
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
+    minHeight: 0,
+    overflow: "hidden",
   },
   header: {
     display: "flex",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: "16px",
-    paddingBottom: "12px",
+    padding: "16px 24px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
-  headerActions: { display: "flex", gap: "8px" },
-  card: {
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusLarge,
-    backgroundColor: tokens.colorNeutralBackground1,
+  headerLeft: { display: "flex", flexDirection: "column", gap: "2px" },
+  headerActions: { display: "flex", gap: "8px", alignItems: "center" },
+  layout: {
+    flex: 1,
+    display: "flex",
+    minHeight: 0,
     overflow: "hidden",
   },
-  cardHeader: {
-    padding: "14px 18px",
+  channelRail: {
+    width: "280px",
+    flexShrink: 0,
+    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
+    background: tokens.colorNeutralBackground2,
+    display: "flex",
+    flexDirection: "column",
+  },
+  channelRailHeader: {
+    padding: "12px 16px",
+    fontSize: "12px",
+    color: tokens.colorNeutralForeground3,
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  channelRailBody: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "4px 8px 8px",
+  },
+  channelItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    padding: "8px 10px 8px 14px",
+    borderRadius: tokens.borderRadiusMedium,
+    background: "transparent",
+    cursor: "pointer",
+    border: "none",
+    width: "100%",
+    textAlign: "left",
+    color: tokens.colorNeutralForeground1,
+    position: "relative",
+    "&:hover": { background: tokens.colorNeutralBackground1Hover },
+  },
+  channelItemActive: {
+    background: tokens.colorNeutralBackground1Selected,
+    "&:hover": { background: tokens.colorNeutralBackground1Selected },
+  },
+  /**
+   * Left-edge accent bar coloured by hash(rule_id). Renders as a 3px wide
+   * vertical strip so the user can scan the rail and recognise groups by
+   * colour at a glance. CSS variable `--group-color` is set per-item below.
+   */
+  channelAccent: {
+    position: "absolute",
+    left: 0,
+    top: "6px",
+    bottom: "6px",
+    width: "3px",
+    borderRadius: "2px",
+    background: "var(--group-color, transparent)",
+  },
+  channelTitleRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: "6px",
+    minWidth: 0,
+  },
+  channelTitle: {
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: "13px",
+    color: "var(--group-color, currentColor)",
+  },
+  channelRuleId: {
+    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    fontSize: "10.5px",
+    color: tokens.colorNeutralForeground3,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  channelPeers: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "3px",
+  },
+  channelPeerChip: {
+    fontSize: "10.5px",
+    padding: "1px 6px",
+    borderRadius: "8px",
+    background: tokens.colorNeutralBackground3,
+    color: tokens.colorNeutralForeground2,
+    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    whiteSpace: "nowrap",
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  channelMeta: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: "11px",
+    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  channelEmpty: {
+    padding: "16px",
+    fontStyle: "italic",
+    color: tokens.colorNeutralForeground3,
+  },
+  main: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  mainHeader: {
+    padding: "12px 24px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: "12px",
   },
-  cardBody: {
-    padding: "16px 18px",
+  log: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "12px 24px",
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "8px",
   },
-  statRow: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-    gap: "12px",
-  },
-  stat: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    padding: "10px 12px",
-    borderRadius: "6px",
-    background: tokens.colorNeutralBackground2,
-  },
-  mono: {
-    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-    fontSize: "12px",
-    color: tokens.colorNeutralForeground2,
-  },
-  pairCodeBlock: {
-    padding: "12px",
-    borderRadius: "6px",
-    background: tokens.colorNeutralBackground2,
-    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-    fontSize: "16px",
-    letterSpacing: "2px",
-    textAlign: "center",
-    userSelect: "all",
-  },
-  pairCmd: {
-    padding: "10px 12px",
-    borderRadius: "6px",
-    background: tokens.colorNeutralBackground2,
-    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-    fontSize: "12px",
-    color: tokens.colorNeutralForeground2,
-    wordBreak: "break-all",
-    userSelect: "all",
-  },
-  emptyHint: {
+  logEmpty: {
+    margin: "auto",
     color: tokens.colorNeutralForeground3,
     fontStyle: "italic",
+  },
+  message: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "flex-start",
+  },
+  messageBody: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, flex: 1 },
+  messageMeta: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+  },
+  messageAuthor: { fontWeight: tokens.fontWeightSemibold, fontSize: "13px" },
+  messagePlatform: {
+    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    fontSize: "11px",
+    color: tokens.colorNeutralForeground3,
+  },
+  messageTime: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: "11px",
+    whiteSpace: "nowrap",
+  },
+  messageText: {
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    fontSize: "14px",
+  },
+  messageSelf: {
+    background: tokens.colorBrandBackground2,
+    borderRadius: tokens.borderRadiusMedium,
+    padding: "6px 10px",
+  },
+  composer: {
+    padding: "12px 24px",
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    gap: "8px",
+    alignItems: "flex-end",
+    background: tokens.colorNeutralBackground1,
+  },
+  composerInput: { flex: 1 },
+  noInstance: {
+    margin: "auto",
+    padding: "32px",
+    textAlign: "center",
+    color: tokens.colorNeutralForeground3,
   },
 });
 
 type Props = { teamId: string };
 
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function channelKey(addr: ChannelAddress): string {
+  const sorted = Object.keys(addr).sort();
+  const obj: Record<string, unknown> = {};
+  for (const k of sorted) obj[k] = addr[k];
+  return JSON.stringify(obj);
+}
+
+function channelLabel(
+  ch: BridgeChannel,
+  customNames: Record<string, string> = {},
+): string {
+  if (ch.rule_id && customNames[ch.rule_id]) return customNames[ch.rule_id];
+  if (ch.rule_id) return ch.rule_id;
+  const a = ch.address;
+  if ("channel" in a && typeof a.channel === "string") return a.channel;
+  return channelKey(a);
+}
+
+/**
+ * Deterministic colour per group so the user can recognise interconnection
+ * groups at a glance. Hash rule_id (or, if missing, the channel key) to one
+ * of N high-contrast palette entries. Same input → same colour every load.
+ */
+const GROUP_PALETTE = [
+  "#0078d4", // blue
+  "#107c10", // green
+  "#d83b01", // orange
+  "#5c2d91", // purple
+  "#008272", // teal
+  "#b146c2", // magenta
+  "#a4262c", // red
+  "#bf8700", // gold
+];
+
+function colorForGroup(ch: BridgeChannel): string {
+  const seed = ch.rule_id || channelKey(ch.address);
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return GROUP_PALETTE[h % GROUP_PALETTE.length];
+}
+
+function peerLabel(p: ChannelPeer): string {
+  const id =
+    (p.address as { group_id?: unknown; channel_id?: unknown; chat_id?: unknown; channel?: unknown })
+      .group_id ??
+    (p.address as { channel_id?: unknown }).channel_id ??
+    (p.address as { chat_id?: unknown }).chat_id ??
+    (p.address as { channel?: unknown }).channel;
+  const platform = p.platform || p.instance_id;
+  if (id === undefined || id === null || id === "") return platform;
+  // Truncate very long IDs from the middle so the platform name stays visible.
+  const s = String(id);
+  const trimmed = s.length > 12 ? s.slice(0, 4) + "…" + s.slice(-4) : s;
+  return `${platform}:${trimmed}`;
+}
+
+function describeAddress(addr: ChannelAddress): string {
+  return Object.entries(addr)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(" ");
+}
+
+function formatTime(t: string | number | null | undefined, fallback: number): string {
+  const ms =
+    typeof t === "number"
+      ? t > 1e12
+        ? t
+        : t * 1000
+      : t
+      ? Date.parse(t)
+      : fallback * 1000;
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toLocaleTimeString();
+}
+
+// ── component ─────────────────────────────────────────────────────────────
+
 export function NextBridgePage({ teamId }: Props) {
   const styles = useStyles();
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [list, setList] = useState<InstanceListResponse | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [instanceId, setInstanceId] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [events, setEvents] = useState<EventEntry[] | null>(null);
-  const [drivers, setDrivers] = useState<Array<{ instance_id: string; platform: string | null }> | null>(null);
-  const [rules, setRules] = useState<Array<Record<string, unknown>> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [channels, setChannels] = useState<BridgeChannel[] | null>(null);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [composer, setComposer] = useState("");
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const logRef = useRef<HTMLDivElement>(null);
 
+  // rule_id → user-assigned display label. Loaded alongside channels;
+  // edited via the rename dialog. Empty entry = use default rule_id.
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
+  const [renameTarget, setRenameTarget] = useState<BridgeChannel | null>(null);
+
+  // Initial fetch: which instances are paired in this team?
   const fetchList = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const r = await fetch(
@@ -185,15 +423,9 @@ export function NextBridgePage({ teamId }: Props) {
       }
       const data = (await r.json()) as InstanceListResponse;
       setList(data);
-      if (data.instances.length > 0) {
-        setSelected((prev) => prev ?? data.instances[0].id);
-      } else {
-        setSelected(null);
-      }
+      setInstanceId((prev) => prev ?? data.instances[0]?.id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
     }
   }, [teamId]);
 
@@ -201,639 +433,496 @@ export function NextBridgePage({ teamId }: Props) {
     void fetchList();
   }, [fetchList]);
 
-  // Fetch status + drivers + rules + events whenever the selected instance changes.
-  const refreshSelected = useCallback(async () => {
-    if (!selected) {
-      setStatus(null);
-      setEvents(null);
-      setDrivers(null);
-      setRules(null);
-      return;
-    }
-    const base = `/api/nextbridge/instances/${encodeURIComponent(
-      selected,
-    )}?teamId=${encodeURIComponent(teamId)}`;
+  // Once we have an instance, pull status + channels + custom group names.
+  const fetchStatusAndChannels = useCallback(async () => {
+    if (!instanceId) return;
     try {
-      const [statusR, eventsR, driversR, rulesR] = await Promise.all([
-        fetch(`${base.replace("?", "/status?")}`),
-        fetch(`${base.replace("?", "/events?")}`),
-        rpc<{ drivers: Array<{ instance_id: string; platform: string | null }> }>(
-          teamId,
-          selected,
-          "drivers.list",
-        ),
-        rpc<{ rules: Array<Record<string, unknown>> }>(
-          teamId,
-          selected,
-          "rules.list",
-        ),
-      ]);
+      const statusR = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/status?teamId=${encodeURIComponent(teamId)}`,
+      );
       if (statusR.ok) setStatus((await statusR.json()) as StatusResponse);
-      if (eventsR.ok) {
-        const body = (await eventsR.json()) as { events: EventEntry[] };
-        setEvents(body.events.slice().reverse());
+
+      const channelsR = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/channels?teamId=${encodeURIComponent(teamId)}`,
+      );
+      if (channelsR.ok) {
+        const body = (await channelsR.json()) as
+          | { ok: true; data: { channels: BridgeChannel[] } }
+          | { ok: false; error: string };
+        if (body.ok) {
+          setChannels(body.data.channels);
+          // First channel becomes active unless user already picked one.
+          setActiveKey((prev) =>
+            prev ?? (body.data.channels[0] ? channelKey(body.data.channels[0].address) : null),
+          );
+        }
       }
-      setDrivers(driversR.ok ? driversR.data?.drivers ?? [] : []);
-      setRules(rulesR.ok ? rulesR.data?.rules ?? [] : []);
+
+      const namesR = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/group-names?teamId=${encodeURIComponent(teamId)}`,
+      );
+      if (namesR.ok) {
+        const body = (await namesR.json()) as { names?: Record<string, string> };
+        setGroupNames(body.names ?? {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [selected, teamId]);
+  }, [instanceId, teamId]);
 
-  useEffect(() => {
-    void refreshSelected();
-  }, [refreshSelected]);
-
-  // Poll the live tail every 5 seconds while a connected instance is selected.
-  useEffect(() => {
-    if (!selected || !status?.connected) return;
-    const id = setInterval(() => void refreshSelected(), 5000);
-    return () => clearInterval(id);
-  }, [selected, status?.connected, refreshSelected]);
-
-  const canManage = list?.can_manage ?? false;
-
-  return (
-    <div className={styles.pageScroll}>
-      <div className={styles.page}>
-        <div className={styles.header}>
-          <div>
-            <Title2 block>{t.bridgeTitle}</Title2>
-            <Body1 block style={{ color: tokens.colorNeutralForeground3 }}>
-              {t.bridgeSubtitle}
-            </Body1>
-          </div>
-          <div className={styles.headerActions}>
-            <Button
-              appearance="subtle"
-              icon={<ArrowClockwiseRegular />}
-              onClick={() => {
-                void fetchList();
-                void refreshSelected();
-              }}
-            >
-              {t.refresh}
-            </Button>
-            {canManage && (
-              <PairButton teamId={teamId} onPaired={() => void fetchList()} />
-            )}
-          </div>
-        </div>
-
-        {error && (
-          <MessageBar intent="error">
-            <MessageBarBody>{error}</MessageBarBody>
-          </MessageBar>
-        )}
-
-        {loading ? (
-          <Spinner label={t.loading} />
-        ) : list && list.instances.length === 0 ? (
-          <Card title={t.bridgeNoInstances} className={styles.card}>
-            <div className={styles.cardBody}>
-              <Body2 className={styles.emptyHint}>
-                {t.bridgeNoInstancesHint}
-              </Body2>
-            </div>
-          </Card>
-        ) : (
-          <>
-            {list && list.instances.length > 1 && (
-              <InstancePicker
-                instances={list.instances}
-                selected={selected}
-                onSelect={setSelected}
-              />
-            )}
-
-            <StatusCard
-              status={status}
-              instance={list?.instances.find((i) => i.id === selected) ?? null}
-              canManage={canManage}
-              onRevoke={async () => {
-                if (!selected) return;
-                if (!confirm(t.bridgeConfirmRevoke)) return;
-                const r = await fetch(
-                  `/api/nextbridge/instances/${encodeURIComponent(
-                    selected,
-                  )}?teamId=${encodeURIComponent(teamId)}`,
-                  { method: "DELETE" },
-                );
-                if (!r.ok) {
-                  const body = (await r.json().catch(() => ({}))) as {
-                    error?: string;
-                  };
-                  setError(body.error ?? `HTTP ${r.status}`);
-                  return;
-                }
-                setSelected(null);
-                void fetchList();
-              }}
-            />
-
-            <DriversCard drivers={drivers} />
-            <RulesCard rules={rules} />
-            <EventsCard events={events} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────
-
-function Card({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className: string;
-}) {
-  const styles = useStyles();
-  return (
-    <div className={className}>
-      <div className={styles.cardHeader}>
-        <Subtitle1>{title}</Subtitle1>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function InstancePicker({
-  instances,
-  selected,
-  onSelect,
-}: {
-  instances: Instance[];
-  selected: string | null;
-  onSelect: (id: string) => void;
-}) {
-  const styles = useStyles();
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardBody}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {instances.map((i) => (
-            <Button
-              key={i.id}
-              appearance={selected === i.id ? "primary" : "subtle"}
-              onClick={() => onSelect(i.id)}
-            >
-              {i.name}
-            </Button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusCard({
-  status,
-  instance,
-  canManage,
-  onRevoke,
-}: {
-  status: StatusResponse | null;
-  instance: Instance | null;
-  canManage: boolean;
-  onRevoke: () => void;
-}) {
-  const styles = useStyles();
-  const { t } = useI18n();
-  if (!instance) return null;
-  const connected = status?.connected ?? false;
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHeader}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Subtitle1>{instance.name}</Subtitle1>
-          {connected ? (
-            <Badge appearance="filled" color="success" icon={<CheckmarkCircleRegular />}>
-              {t.bridgeConnected}
-            </Badge>
-          ) : (
-            <Badge
-              appearance="filled"
-              color="severe"
-              icon={<PlugDisconnectedRegular />}
-            >
-              {t.bridgeDisconnected}
-            </Badge>
-          )}
-        </div>
-        {canManage && (
-          <Button
-            appearance="subtle"
-            icon={<DeleteRegular />}
-            onClick={onRevoke}
-          >
-            {t.bridgeRevoke}
-          </Button>
-        )}
-      </div>
-      <div className={styles.cardBody}>
-        <div className={styles.statRow}>
-          <Stat label={t.bridgeInstanceId} value={instance.id} mono />
-          <Stat
-            label={t.bridgeVersion}
-            value={status?.meta.version ?? "—"}
-          />
-          <Stat
-            label={t.bridgeCommandPrefix}
-            value={status?.meta.command_prefix ? `/${status.meta.command_prefix}` : "—"}
-          />
-          <Stat
-            label={t.bridgeEventsBuffered}
-            value={String(status?.event_buffer ?? 0)}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  const styles = useStyles();
-  return (
-    <div className={styles.stat}>
-      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>{label}</Caption1>
-      <Body2 className={mono ? styles.mono : undefined}>{value}</Body2>
-    </div>
-  );
-}
-
-function DriversCard({
-  drivers,
-}: {
-  drivers: Array<{ instance_id: string; platform: string | null }> | null;
-}) {
-  const styles = useStyles();
-  const { t } = useI18n();
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHeader}>
-        <Subtitle1>{t.bridgeDriversTitle}</Subtitle1>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          {t.bridgeDriversHint}
-        </Caption1>
-      </div>
-      <div className={styles.cardBody}>
-        {drivers === null ? (
-          <Spinner size="tiny" label={t.loading} />
-        ) : drivers.length === 0 ? (
-          <Body2 className={styles.emptyHint}>{t.bridgeDriversEmpty}</Body2>
-        ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColInstance}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColPlatform}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {drivers.map((d) => (
-                <TableRow key={d.instance_id}>
-                  <TableCell>
-                    <span className={styles.mono}>{d.instance_id}</span>
-                  </TableCell>
-                  <TableCell>{d.platform ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RulesCard({
-  rules,
-}: {
-  rules: Array<Record<string, unknown>> | null;
-}) {
-  const styles = useStyles();
-  const { t } = useI18n();
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHeader}>
-        <Subtitle1>{t.bridgeRulesTitle}</Subtitle1>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          {t.bridgeRulesHint}
-        </Caption1>
-      </div>
-      <div className={styles.cardBody}>
-        {rules === null ? (
-          <Spinner size="tiny" label={t.loading} />
-        ) : rules.length === 0 ? (
-          <Body2 className={styles.emptyHint}>{t.bridgeRulesEmpty}</Body2>
-        ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColRuleId}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColRuleType}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColRuleSummary}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rules.map((r, idx) => (
-                <TableRow key={String(r.id ?? idx)}>
-                  <TableCell>
-                    <span className={styles.mono}>{String(r.id ?? "")}</span>
-                  </TableCell>
-                  <TableCell>{String(r.type ?? "forward")}</TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{summarizeRule(r)}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function summarizeRule(rule: Record<string, unknown>): string {
-  if (rule.type === "connect") {
-    const channels = (rule.channels ?? {}) as Record<string, unknown>;
-    return `connect: ${Object.keys(channels).join(", ")}`;
-  }
-  const from = (rule.from ?? {}) as Record<string, unknown>;
-  const to = (rule.to ?? {}) as Record<string, unknown>;
-  return `${Object.keys(from).join(",") || "?"} → ${Object.keys(to).join(",") || "?"}`;
-}
-
-function EventsCard({ events }: { events: EventEntry[] | null }) {
-  const styles = useStyles();
-  const { t } = useI18n();
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHeader}>
-        <Subtitle1>{t.bridgeEventsTitle}</Subtitle1>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          {t.bridgeEventsHint}
-        </Caption1>
-      </div>
-      <div className={styles.cardBody}>
-        {events === null ? (
-          <Spinner size="tiny" label={t.loading} />
-        ) : events.length === 0 ? (
-          <Body2 className={styles.emptyHint}>{t.bridgeEventsEmpty}</Body2>
-        ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColEventTime}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventTopic}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventDetail}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.slice(0, 50).map((ev, idx) => (
-                <TableRow key={idx}>
-                  <TableCell>
-                    <span className={styles.mono}>
-                      {new Date(ev.t * 1000).toLocaleTimeString()}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{ev.topic}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={styles.mono}
-                      style={{
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
-                        overflow: "hidden",
-                        maxWidth: 480,
-                        display: "inline-block",
-                      }}
-                    >
-                      {summarizeEvent(ev)}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function summarizeEvent(ev: EventEntry): string {
-  if (!ev.data || typeof ev.data !== "object") return String(ev.data ?? "");
-  const d = ev.data as Record<string, unknown>;
-  if (ev.topic === "bridge.message") {
-    return `${d.instance_id ?? "?"} ${d.user ?? d.user_id ?? "?"}: ${truncate(
-      String(d.text ?? ""),
-      80,
-    )}`;
-  }
-  if (ev.topic === "driver.status") {
-    return `${d.instance_id ?? "?"} (${d.platform ?? "?"}) connected=${d.connected}`;
-  }
-  return JSON.stringify(d);
-}
-
-function truncate(s: string, n: number): string {
-  return s.length <= n ? s : s.slice(0, n - 1) + "…";
-}
-
-// ── Pair modal ────────────────────────────────────────────────────────────
-
-function PairButton({
-  teamId,
-  onPaired,
-}: {
-  teamId: string;
-  onPaired: () => void;
-}) {
-  const { t } = useI18n();
-  const styles = useStyles();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const reset = () => {
-    setName("");
-    setCode(null);
-    setExpiresAt(null);
-    setErr(null);
-  };
-
-  const generate = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const r = await fetch("/api/nextbridge/instances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId, name: name.trim() }),
-      });
-      const body = (await r.json()) as
-        | { code: string; expires_in: number }
-        | { error: string };
-      if (!r.ok || !("code" in body)) {
-        setErr(("error" in body && body.error) || `HTTP ${r.status}`);
-        return;
+  /** Persist a single rule's custom name. Empty string clears it. */
+  const saveGroupName = useCallback(
+    async (ruleId: string, name: string) => {
+      if (!instanceId) return;
+      const next = { ...groupNames };
+      const trimmed = name.trim();
+      if (trimmed) next[ruleId] = trimmed;
+      else delete next[ruleId];
+      setGroupNames(next); // optimistic
+      try {
+        await fetch(
+          `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/group-names?teamId=${encodeURIComponent(teamId)}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ names: next }),
+          },
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
       }
-      setCode(body.code);
-      setExpiresAt(Date.now() + body.expires_in * 1000);
+    },
+    [instanceId, teamId, groupNames],
+  );
+
+  useEffect(() => {
+    void fetchStatusAndChannels();
+  }, [fetchStatusAndChannels]);
+
+  // Fetch messages for the active channel; poll every 3 seconds.
+  const fetchMessages = useCallback(async () => {
+    if (!instanceId || !activeKey) return;
+    try {
+      const qs = new URLSearchParams({
+        teamId,
+        channel_key: activeKey,
+        limit: "200",
+      });
+      const r = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/messages?${qs.toString()}`,
+      );
+      if (!r.ok) return;
+      const body = (await r.json()) as { messages: ChatMessage[] };
+      setMessages(body.messages);
+    } catch {
+      // transient — keep last good state
+    }
+  }, [instanceId, teamId, activeKey]);
+
+  useEffect(() => {
+    setMessages(null);
+    void fetchMessages();
+  }, [fetchMessages]);
+
+  useEffect(() => {
+    if (!instanceId || !activeKey) return;
+    const id = setInterval(() => void fetchMessages(), 3000);
+    return () => clearInterval(id);
+  }, [instanceId, activeKey, fetchMessages]);
+
+  // Auto-scroll the log when new messages arrive.
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const activeChannel = useMemo(
+    () => channels?.find((c) => channelKey(c.address) === activeKey) ?? null,
+    [channels, activeKey],
+  );
+
+  const send = async () => {
+    if (!instanceId || !activeChannel || !composer.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const r = await fetch(
+        `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/chat/send?teamId=${encodeURIComponent(teamId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel: activeChannel.address,
+            text: composer,
+          }),
+        },
+      );
+      const body = (await r.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!r.ok || body.ok === false) {
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
+      setComposer("");
+      // Refresh messages so the echo arrives quickly (driver buffers it as
+      // chat.inbound, which the DO persists).
+      void fetchMessages();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setSending(false);
     }
   };
 
-  const minutesLeft = useMemo(() => {
-    if (!expiresAt) return null;
-    const diff = expiresAt - Date.now();
-    if (diff <= 0) return 0;
-    return Math.ceil(diff / 60_000);
-  }, [expiresAt]);
+  const canManage = list?.can_manage ?? false;
+  const connected = status?.connected ?? false;
+  const instances = list?.instances ?? [];
 
-  const cmd = code
-    ? `python main.py workbench pair ${window.location.origin} ${code}`
-    : "";
+  return (
+    <div className={styles.root}>
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
+          <Title2>{t.bridgeTitle}</Title2>
+          <Body1 style={{ color: tokens.colorNeutralForeground3 }}>
+            {connected ? t.bridgeConnected : t.bridgeDisconnected}
+            {status?.meta.instance_name ? ` · ${status.meta.instance_name}` : ""}
+          </Body1>
+        </div>
+        <div className={styles.headerActions}>
+          <Button
+            appearance="subtle"
+            icon={<ArrowClockwiseRegular />}
+            onClick={() => {
+              void fetchList();
+              void fetchStatusAndChannels();
+              void fetchMessages();
+            }}
+          >
+            {t.refresh}
+          </Button>
+          {canManage && (
+            <Button
+              appearance="subtle"
+              icon={<SettingsRegular />}
+              onClick={() => navigate("/bridge/config")}
+            >
+              {t.bridgeConfigure}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
+      )}
+
+      {!list ? (
+        <div className={styles.noInstance}>
+          <Spinner label={t.loading} />
+        </div>
+      ) : instances.length === 0 ? (
+        <div className={styles.noInstance}>
+          <Body2 block style={{ marginBottom: 12 }}>
+            {t.bridgeNoInstancesHint}
+          </Body2>
+          {canManage && (
+            <Button
+              appearance="primary"
+              icon={<SettingsRegular />}
+              onClick={() => navigate("/bridge/config")}
+            >
+              {t.bridgePairButton}
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className={styles.layout}>
+          <aside className={styles.channelRail}>
+            <div className={styles.channelRailHeader}>{t.bridgeChannels}</div>
+            <div className={styles.channelRailBody}>
+              {channels === null ? (
+                <Spinner size="tiny" label={t.loading} />
+              ) : channels.length === 0 ? (
+                <div className={styles.channelEmpty}>
+                  <Body2>{t.bridgeChannelsEmpty}</Body2>
+                </div>
+              ) : (
+                channels.map((ch) => {
+                  const key = channelKey(ch.address);
+                  const color = colorForGroup(ch);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={mergeClasses(
+                        styles.channelItem,
+                        key === activeKey && styles.channelItemActive,
+                      )}
+                      style={
+                        { "--group-color": color } as React.CSSProperties
+                      }
+                      onClick={() => setActiveKey(key)}
+                      title={`${ch.rule_type} · ${describeAddress(ch.address)}`}
+                    >
+                      <span
+                        className={styles.channelAccent}
+                        aria-hidden="true"
+                      />
+                      <span className={styles.channelTitleRow}>
+                        <span className={styles.channelTitle}>
+                          {channelLabel(ch, groupNames)}
+                        </span>
+                        {ch.rule_id && groupNames[ch.rule_id] && (
+                          // Only show the raw rule_id alongside the title when
+                          // a custom name has been set — otherwise the title
+                          // IS the rule_id and showing it twice is noise.
+                          <span className={styles.channelRuleId}>
+                            {ch.rule_id}
+                          </span>
+                        )}
+                      </span>
+                      {ch.peers && ch.peers.length > 0 ? (
+                        <span className={styles.channelPeers}>
+                          {ch.peers.map((p) => (
+                            <span
+                              key={`${p.instance_id}-${channelKey(p.address)}`}
+                              className={styles.channelPeerChip}
+                              title={describeAddress(p.address)}
+                            >
+                              {peerLabel(p)}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className={styles.channelMeta}>
+                          {t.bridgeGroupSolo}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+
+          <section className={styles.main}>
+            {activeChannel ? (
+              <>
+                <div
+                  className={styles.mainHeader}
+                  style={{
+                    boxShadow: `inset 4px 0 0 0 ${colorForGroup(activeChannel)}`,
+                  }}
+                >
+                  <Subtitle1 style={{ color: colorForGroup(activeChannel) }}>
+                    {channelLabel(activeChannel, groupNames)}
+                  </Subtitle1>
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    icon={<EditRegular />}
+                    title={t.bridgeRenameGroup}
+                    onClick={() => setRenameTarget(activeChannel)}
+                  />
+                  <Caption1
+                    style={{
+                      color: tokens.colorNeutralForeground3,
+                      fontFamily:
+                        "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+                    }}
+                  >
+                    {activeChannel.rule_type}
+                    {activeChannel.rule_id ? ` · ${activeChannel.rule_id}` : ""}
+                  </Caption1>
+                  {activeChannel.peers && activeChannel.peers.length > 0 && (
+                    <span className={styles.channelPeers} style={{ marginLeft: 4 }}>
+                      {activeChannel.peers.map((p) => (
+                        <span
+                          key={`${p.instance_id}-${channelKey(p.address)}`}
+                          className={styles.channelPeerChip}
+                          title={describeAddress(p.address)}
+                        >
+                          {peerLabel(p)}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  {!connected && (
+                    <Caption1
+                      style={{
+                        color: tokens.colorPaletteRedForeground1,
+                        marginLeft: "auto",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <PlugDisconnectedRegular /> {t.bridgeDisconnected}
+                    </Caption1>
+                  )}
+                </div>
+
+                <div className={styles.log} ref={logRef}>
+                  {messages === null ? (
+                    <Spinner size="tiny" label={t.loading} />
+                  ) : messages.length === 0 ? (
+                    <div className={styles.logEmpty}>{t.bridgeChannelEmpty}</div>
+                  ) : (
+                    messages.map((m, idx) => (
+                      <div
+                        key={m.message_id || `${m.recorded_at}-${idx}`}
+                        className={styles.message}
+                      >
+                        <Avatar
+                          name={m.user || m.user_id}
+                          size={28}
+                          aria-label={m.user}
+                        />
+                        <div className={styles.messageBody}>
+                          <div className={styles.messageMeta}>
+                            <span className={styles.messageAuthor}>
+                              {m.user || m.user_id || "(unknown)"}
+                            </span>
+                            <span className={styles.messagePlatform}>
+                              {m.platform
+                                ? `${m.platform}${m.instance_id ? "/" + m.instance_id : ""}`
+                                : "—"}
+                            </span>
+                            <span className={styles.messageTime}>
+                              {formatTime(m.time, m.recorded_at)}
+                            </span>
+                          </div>
+                          <span
+                            className={mergeClasses(
+                              styles.messageText,
+                              m.self && styles.messageSelf,
+                            )}
+                          >
+                            {m.text}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className={styles.composer}>
+                  <Textarea
+                    className={styles.composerInput}
+                    rows={1}
+                    resize="vertical"
+                    placeholder={
+                      connected
+                        ? t.bridgeComposerPlaceholder
+                        : t.bridgeComposerDisconnected
+                    }
+                    value={composer}
+                    onChange={(_, d) => setComposer(d.value)}
+                    disabled={!connected || sending}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                  />
+                  <Button
+                    appearance="primary"
+                    icon={<SendRegular />}
+                    disabled={!connected || sending || !composer.trim()}
+                    onClick={() => void send()}
+                  >
+                    {sending ? <Spinner size="tiny" /> : t.bridgeSend}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className={styles.noInstance}>
+                <Body2>{t.bridgeNoChannelSelected}</Body2>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      <RenameGroupDialog
+        target={renameTarget}
+        currentName={
+          renameTarget && renameTarget.rule_id
+            ? groupNames[renameTarget.rule_id] ?? ""
+            : ""
+        }
+        onCancel={() => setRenameTarget(null)}
+        onSave={async (name) => {
+          if (renameTarget?.rule_id) {
+            await saveGroupName(renameTarget.rule_id, name);
+          }
+          setRenameTarget(null);
+        }}
+      />
+    </div>
+  );
+}
+
+function RenameGroupDialog({
+  target,
+  currentName,
+  onCancel,
+  onSave,
+}: {
+  target: BridgeChannel | null;
+  currentName: string;
+  onCancel: () => void;
+  onSave: (name: string) => void | Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [value, setValue] = useState(currentName);
+  useEffect(() => {
+    setValue(currentName);
+  }, [currentName, target?.rule_id]);
 
   return (
     <Dialog
-      open={open}
-      onOpenChange={(_, data) => {
-        setOpen(data.open);
-        if (!data.open) reset();
+      open={target !== null}
+      onOpenChange={(_, d) => {
+        if (!d.open) onCancel();
       }}
     >
-      <DialogTrigger disableButtonEnhancement>
-        <Button appearance="primary" icon={<AddRegular />}>
-          {t.bridgePairButton}
-        </Button>
-      </DialogTrigger>
       <DialogSurface>
         <DialogBody>
-          <DialogTitle>{t.bridgePairTitle}</DialogTitle>
+          <DialogTitle>{t.bridgeRenameGroupTitle}</DialogTitle>
           <DialogContent>
-            {!code ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <Body2>{t.bridgePairIntro}</Body2>
-                <Field label={t.bridgeInstanceName}>
-                  <Input
-                    value={name}
-                    onChange={(_, d) => setName(d.value)}
-                    placeholder="NextBridge"
-                  />
-                </Field>
-                {err && (
-                  <MessageBar intent="error">
-                    <MessageBarBody>{err}</MessageBarBody>
-                  </MessageBar>
-                )}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <Body2>{t.bridgePairCodeIntro}</Body2>
-                <div className={styles.pairCodeBlock}>{code}</div>
-                {minutesLeft !== null && (
-                  <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                    {t.bridgePairExpiresIn(minutesLeft)}
-                  </Caption1>
-                )}
-                <Body2>{t.bridgePairRunCmd}</Body2>
-                <div className={styles.pairCmd}>{cmd}</div>
-                <Button
-                  appearance="subtle"
-                  icon={<CopyRegular />}
-                  onClick={() => void navigator.clipboard.writeText(cmd)}
-                >
-                  {t.bridgeCopyCmd}
-                </Button>
-                <Body2 style={{ color: tokens.colorNeutralForeground3 }}>
-                  {t.bridgePairAfterRun}
-                </Body2>
-              </div>
-            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Body2>
+                {t.bridgeRenameGroupHint}{" "}
+                <code>{target?.rule_id ?? ""}</code>
+              </Body2>
+              <Field label={t.bridgeRenameGroupField}>
+                <Input
+                  value={value}
+                  onChange={(_, d) => setValue(d.value)}
+                  placeholder={target?.rule_id ?? ""}
+                  autoFocus
+                />
+              </Field>
+            </div>
           </DialogContent>
           <DialogActions>
-            {!code ? (
-              <>
-                <DialogTrigger disableButtonEnhancement>
-                  <Button appearance="secondary">{t.cancel}</Button>
-                </DialogTrigger>
-                <Button
-                  appearance="primary"
-                  disabled={busy}
-                  onClick={() => void generate()}
-                >
-                  {busy ? <Spinner size="tiny" /> : t.bridgePairGenerate}
-                </Button>
-              </>
-            ) : (
-              <Button
-                appearance="primary"
-                onClick={() => {
-                  setOpen(false);
-                  onPaired();
-                }}
-                icon={<DismissCircleRegular />}
-              >
-                {t.close}
-              </Button>
-            )}
+            <Button appearance="secondary" onClick={onCancel}>
+              {t.cancel}
+            </Button>
+            <Button
+              appearance="primary"
+              onClick={() => void onSave(value)}
+            >
+              {t.save}
+            </Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>
     </Dialog>
   );
-}
-
-// ── RPC helper ────────────────────────────────────────────────────────────
-
-async function rpc<T>(
-  teamId: string,
-  instanceId: string,
-  method: string,
-  params: Record<string, unknown> = {},
-): Promise<RpcResult<T>> {
-  try {
-    const r = await fetch(
-      `/api/nextbridge/instances/${encodeURIComponent(
-        instanceId,
-      )}/rpc?teamId=${encodeURIComponent(teamId)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method, params }),
-      },
-    );
-    const body = (await r.json().catch(() => ({}))) as RpcResult<T>;
-    if (!r.ok) {
-      return { ok: false, error: body.error ?? `HTTP ${r.status}` };
-    }
-    return body;
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
 }

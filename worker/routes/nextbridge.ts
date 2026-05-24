@@ -52,9 +52,10 @@ function getRole(session: SessionData, teamId: string) {
   return session.teams.find((t) => t.id === teamId)?.role ?? null;
 }
 
+/** Bridge configuration / pairing is open to anyone above member rank. */
 function canManage(session: SessionData, teamId: string): boolean {
   const role = getRole(session, teamId);
-  return role === "owner" || role === "co-owner";
+  return role === "owner" || role === "co-owner" || role === "admin";
 }
 
 function isMember(session: SessionData, teamId: string): boolean {
@@ -296,6 +297,135 @@ nb.post("/api/nextbridge/instances/:id/rpc", requireAuth, async (c) => {
     new Request("https://do/rpc", {
       method: "POST",
       body,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  return new Response(await resp.text(), {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+// ── Chat endpoints ─────────────────────────────────────────────────────────
+//
+// Thin wrappers over the DO storage (`messages`) and the NextBridge RPC
+// surface (`chat.channels`, `chat.send`). They live behind requireAuth +
+// team-member check so any member of the team can read history and post —
+// configuration (pairing / revoke) is the only operation gated by `canManage`.
+
+function channelKeyFromAddress(addr: unknown): string {
+  if (!addr || typeof addr !== "object") return "";
+  const obj = addr as Record<string, unknown>;
+  const sorted = Object.keys(obj).sort();
+  const ordered: Record<string, unknown> = {};
+  for (const k of sorted) ordered[k] = obj[k];
+  return JSON.stringify(ordered);
+}
+
+nb.get("/api/nextbridge/instances/:id/messages", requireAuth, async (c) => {
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+  const limit = c.req.query("limit") ?? "200";
+  // Accept either a pre-computed channel key (`channel_key=...`) or a
+  // JSON-encoded address (`channel={"channel":"ops"}`). The latter is more
+  // convenient from the frontend.
+  let channelParam = c.req.query("channel_key") ?? "";
+  const channelJson = c.req.query("channel");
+  if (!channelParam && channelJson) {
+    try {
+      channelParam = channelKeyFromAddress(JSON.parse(channelJson));
+    } catch {
+      return c.json({ error: "invalid `channel` JSON" }, 400);
+    }
+  }
+  const qs = new URLSearchParams({ limit });
+  if (channelParam) qs.set("channel", channelParam);
+  const resp = await hubStub(c.env, access.teamId, access.id).fetch(
+    new Request(`https://do/messages?${qs.toString()}`),
+  );
+  return new Response(await resp.text(), {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+// Custom group display names — stored in the DO, scoped per instance. Any
+// team member may rename: these are pure display labels, the real routing
+// identity stays in NextBridge's rules.yaml.
+nb.get("/api/nextbridge/instances/:id/group-names", requireAuth, async (c) => {
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+  const resp = await hubStub(c.env, access.teamId, access.id).fetch(
+    new Request("https://do/group-names"),
+  );
+  return new Response(await resp.text(), {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+nb.put("/api/nextbridge/instances/:id/group-names", requireAuth, async (c) => {
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+  const body = await c.req.text();
+  const resp = await hubStub(c.env, access.teamId, access.id).fetch(
+    new Request("https://do/group-names", {
+      method: "PUT",
+      body,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  return new Response(await resp.text(), {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+nb.get("/api/nextbridge/instances/:id/channels", requireAuth, async (c) => {
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+  const resp = await hubStub(c.env, access.teamId, access.id).fetch(
+    new Request("https://do/rpc", {
+      method: "POST",
+      body: JSON.stringify({ method: "chat.channels", params: {} }),
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  return new Response(await resp.text(), {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+nb.post("/api/nextbridge/instances/:id/chat/send", requireAuth, async (c) => {
+  const access = await requireInstanceAccess(c);
+  if (access instanceof Response) return access;
+  let body: { channel?: unknown; text?: string };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json({ error: "invalid JSON" }, 400);
+  }
+  const text = (body.text ?? "").trim();
+  if (!text) return c.json({ error: "text is required" }, 400);
+  if (!body.channel || typeof body.channel !== "object") {
+    return c.json({ error: "channel must be an object" }, 400);
+  }
+
+  // Identify the Workbench user to the NextBridge side. We pass username +
+  // display name so other platforms can render the author.
+  const session = c.get("session");
+  const params = {
+    channel: body.channel,
+    text,
+    user: session.displayName || session.username,
+    user_id: session.userId,
+  };
+
+  const resp = await hubStub(c.env, access.teamId, access.id).fetch(
+    new Request("https://do/rpc", {
+      method: "POST",
+      body: JSON.stringify({ method: "chat.send", params }),
       headers: { "Content-Type": "application/json" },
     }),
   );
