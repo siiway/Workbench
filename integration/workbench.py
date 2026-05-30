@@ -871,7 +871,7 @@ def cmd_pair(
     workbench_url: str,
     code: str,
     instance_name: str | None,
-    inst_id: str = "default",
+    inst_id: str = "workbench",
 ) -> None:
     base = _http_base(workbench_url)
     endpoint = f"{base}/api/nextbridge/pair"
