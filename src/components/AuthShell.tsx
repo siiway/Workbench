@@ -19,14 +19,10 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
     position: "relative",
     overflow: "hidden",
-    // Soft brand blooms from opposite corners
     backgroundImage: `
       radial-gradient(ellipse at 20% 20%, color-mix(in srgb, ${tokens.colorBrandBackground} 8%, transparent) 0%, transparent 60%),
       radial-gradient(ellipse at 80% 80%, color-mix(in srgb, ${tokens.colorBrandBackground} 8%, transparent) 0%, transparent 60%)
     `,
-    "@media (prefers-reduced-motion: reduce)": {
-      // No entrance animation
-    },
   },
   card: {
     "--auth-card-pad": "40px",
@@ -38,7 +34,10 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     padding: "var(--auth-card-pad)",
-    animationName: "authCardEnter",
+    animationName: {
+      from: { opacity: 0, transform: "translateY(10px)" },
+      to: { opacity: 1, transform: "translateY(0)" },
+    },
     animationDuration: "0.35s",
     animationTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
     animationFillMode: "both",
@@ -49,27 +48,7 @@ const useStyles = makeStyles({
       animationName: "none",
     },
   },
-  // Keyframes injected via style tag in the component
 });
-
-// Inject keyframes once
-const keyframeStyle = document.createElement("style");
-keyframeStyle.textContent = `
-@keyframes authCardEnter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-`;
-if (!document.getElementById("auth-card-keyframes")) {
-  keyframeStyle.id = "auth-card-keyframes";
-  document.head.appendChild(keyframeStyle);
-}
 
 type Props = {
   children: ReactNode;

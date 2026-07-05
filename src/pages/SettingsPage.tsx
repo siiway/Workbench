@@ -59,9 +59,6 @@ const useStyles = makeStyles({
     display: "flex",
     gap: tokens.spacingHorizontalS,
   },
-  tableScroll: {
-    overflowX: "auto",
-  },
 });
 
 // ─── Global settings tab ────────────────────────────────────────────────────
@@ -92,7 +89,7 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
       .then((d) => setForm(d as GlobalConfig))
       .catch(() => setError(t.settingsFailedToLoad))
       .finally(() => setLoading(false));
-  }, []);
+  }, [t.settingsFailedToLoad]);
 
   const set = (k: keyof GlobalConfig) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => f ? { ...f, [k]: e.target.value } : f);
@@ -243,7 +240,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
       .then((r) => r.json())
       .then((d) => setConfigs((prev) => ({ ...prev, [activeTeamId]: d as TeamConfig })))
       .catch(() => setError(t.settingsFailedToLoad));
-  }, [activeTeamId, configs]);
+  }, [activeTeamId, configs, t.settingsFailedToLoad]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
