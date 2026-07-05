@@ -3,41 +3,20 @@ import {
   Button,
   Field,
   Input,
-  Title2,
+  Text,
   Body1,
-  makeStyles,
   tokens,
   MessageBar,
   MessageBarBody,
 } from "@fluentui/react-components";
-
-const useStyles = makeStyles({
-  root: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    padding: tokens.spacingVerticalXL,
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalM,
-    padding: tokens.spacingVerticalXXL,
-    borderRadius: tokens.borderRadiusXLarge,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-    width: "100%",
-    maxWidth: "480px",
-    boxShadow: tokens.shadow8,
-  },
-});
+import { useI18n } from "../i18n";
+import { AuthShell } from "../components/AuthShell";
+import { PasswordInput } from "../components/PasswordInput";
 
 type Props = { onComplete: () => void };
 
 export function InitPage({ onComplete }: Props) {
-  const styles = useStyles();
+  const { t } = useI18n();
   const [form, setForm] = useState({
     prism_base_url: "",
     prism_client_id: "",
@@ -65,22 +44,29 @@ export function InitPage({ onComplete }: Props) {
       });
       if (!res.ok) {
         const d: { error?: string } = await res.json();
-        setError(d.error ?? "Setup failed");
+        setError(d.error ?? t.initSetupFailed);
         return;
       }
       onComplete();
     } catch {
-      setError("Network error");
+      setError(t.networkError);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className={styles.root}>
-      <form className={styles.card} onSubmit={(e) => void submit(e)}>
-        <Title2>Setup Workbench</Title2>
-        <Body1>Configure your Prism identity provider and Glint instance.</Body1>
+    <AuthShell maxWidth={480}>
+      <form
+        onSubmit={(e) => void submit(e)}
+        style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM }}
+      >
+        <Text size={600} weight="bold">
+          {t.initTitle}
+        </Text>
+        <Body1 style={{ color: tokens.colorNeutralForeground3 }}>
+          {t.initSubtitle}
+        </Body1>
 
         {error && (
           <MessageBar intent="error">
@@ -88,38 +74,60 @@ export function InitPage({ onComplete }: Props) {
           </MessageBar>
         )}
 
-        <Field label="Prism Base URL" required>
-          <Input placeholder="https://auth.example.com" value={form.prism_base_url} onChange={set("prism_base_url")} />
+        <Field label={t.initFieldPrismBaseUrl} required>
+          <Input
+            placeholder="https://auth.example.com"
+            value={form.prism_base_url}
+            onChange={set("prism_base_url")}
+            autoFocus
+          />
         </Field>
-        <Field label="Prism Client ID" required>
-          <Input placeholder="your-client-id" value={form.prism_client_id} onChange={set("prism_client_id")} />
+        <Field label={t.initFieldPrismClientId} required>
+          <Input
+            placeholder="your-client-id"
+            value={form.prism_client_id}
+            onChange={set("prism_client_id")}
+          />
         </Field>
         <Field
-          label="Prism Client Secret"
-          hint="Leave blank to use PKCE instead of a client secret."
+          label={t.initFieldPrismClientSecret}
+          hint={t.initFieldPrismClientSecretHint}
         >
-          <Input type="password" placeholder="Leave blank to use PKCE" value={form.prism_client_secret} onChange={set("prism_client_secret")} />
+          <PasswordInput
+            placeholder={t.initFieldPrismClientSecretHint}
+            value={form.prism_client_secret}
+            onChange={set("prism_client_secret")}
+            autoComplete="new-password"
+          />
         </Field>
-        <Field label="Redirect URI" required>
+        <Field label={t.initFieldRedirectUri} required>
           <Input value={form.prism_redirect_uri} onChange={set("prism_redirect_uri")} />
         </Field>
         <Field
-          label="Default Glint Base URL"
-          hint="Used for teams that don't have a team-specific Glint URL. Can be left blank and configured per-team later."
+          label={t.initFieldGlintBaseUrl}
+          hint={t.initFieldGlintBaseUrlHint}
         >
-          <Input placeholder="https://glint.example.com" value={form.glint_base_url} onChange={set("glint_base_url")} />
+          <Input
+            placeholder="https://glint.example.com"
+            value={form.glint_base_url}
+            onChange={set("glint_base_url")}
+          />
         </Field>
         <Field
-          label="Glint Prism Client ID"
-          hint="Glint's client_id in Prism. Required for Workbench to request app:<id>:<scope> cross-app scopes during OAuth. Can leave empty and configure later in Settings."
+          label={t.initFieldGlintClientId}
+          hint={t.initFieldGlintClientIdHint}
         >
-          <Input placeholder="prism_xxxxxxxxxxxx" value={form.glint_client_id} onChange={set("glint_client_id")} />
+          <Input
+            placeholder="prism_xxxxxxxxxxxx"
+            value={form.glint_client_id}
+            onChange={set("glint_client_id")}
+          />
         </Field>
 
         <Button type="submit" appearance="primary" disabled={saving}>
-          {saving ? "Saving…" : "Save & Continue"}
+          {saving ? t.saving : t.initSaveContinue}
         </Button>
       </form>
-    </div>
+    </AuthShell>
   );
 }

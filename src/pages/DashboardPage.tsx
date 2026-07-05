@@ -8,7 +8,6 @@ import {
   Caption1,
   Spinner,
   Text,
-  Title2,
   Title3,
   makeStyles,
   tokens,
@@ -27,6 +26,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import type { TeamOverview, MyTodo, FeedItem } from "../types";
 import { useI18n } from "../i18n";
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/EmptyState";
 
 const useStyles = makeStyles({
   root: {
@@ -37,19 +38,6 @@ const useStyles = makeStyles({
     boxSizing: "border-box",
     height: "100%",
     overflowY: "auto",
-  },
-  welcome: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-    marginBottom: "8px",
-  },
-  headerRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "16px",
-    flexWrap: "wrap",
   },
   configBanner: {
     padding: "16px",
@@ -108,11 +96,6 @@ const useStyles = makeStyles({
     display: "block",
     color: tokens.colorNeutralForeground3,
     marginTop: "2px",
-  },
-  empty: {
-    color: tokens.colorNeutralForeground3,
-    padding: "16px 0",
-    textAlign: "center",
   },
   cardFooter: {
     padding: "8px 16px 12px",
@@ -188,21 +171,19 @@ export function DashboardPage({ teamId }: Props) {
 
   return (
     <div className={styles.root}>
-      <div className={styles.headerRow}>
-        <div className={styles.welcome}>
-          <Title2>{t.overviewTitle}</Title2>
-          <Text style={{ color: tokens.colorNeutralForeground3 }}>
-            {t.overviewSubtitle}
-          </Text>
-        </div>
-        <Button
-          appearance="subtle"
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => void load()}
-        >
-          {t.refresh}
-        </Button>
-      </div>
+      <PageHeader
+        title={t.overviewTitle}
+        subtitle={t.overviewSubtitle}
+        actions={
+          <Button
+            appearance="subtle"
+            icon={<ArrowClockwiseRegular />}
+            onClick={() => void load()}
+          >
+            {t.refresh}
+          </Button>
+        }
+      />
 
       {glintError && (
         <div className={styles.configBanner}>
@@ -326,9 +307,10 @@ export function DashboardPage({ teamId }: Props) {
               />
               <div className={styles.listBody}>
                 {myTodos.length === 0 ? (
-                  <Caption1 className={styles.empty}>
-                    {t.emptyMyTasks}
-                  </Caption1>
+                  <EmptyState
+                    icon={<ClipboardTaskListLtrRegular />}
+                    title={t.emptyMyTasks}
+                  />
                 ) : (
                   myTodos.map((todo) => (
                     <div key={todo.id} className={styles.row}>
@@ -382,7 +364,10 @@ export function DashboardPage({ teamId }: Props) {
               />
               <div className={styles.listBody}>
                 {feed.length === 0 ? (
-                  <Caption1 className={styles.empty}>{t.emptyActivity}</Caption1>
+                  <EmptyState
+                    icon={<HistoryRegular />}
+                    title={t.emptyActivity}
+                  />
                 ) : (
                   feed.map((item) => (
                     <div key={item.id} className={styles.row}>

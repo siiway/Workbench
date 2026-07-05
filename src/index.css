@@ -12,6 +12,16 @@ body,
   height: 100%;
 }
 
+/* Paint the canvas to match Fluent's neutral background per theme */
+html {
+  background-color: #ffffff;
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  background-color: #1f1f1f;
+  color-scheme: dark;
+}
+
 body {
   font-family:
     "Segoe UI",
@@ -27,6 +37,7 @@ a {
   text-decoration: none;
 }
 
+/* Slim custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -40,4 +51,12 @@ a {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.35);
+}
+
+/* Dark-mode scrollbar */
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
 }

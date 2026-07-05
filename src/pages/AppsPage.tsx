@@ -17,7 +17,6 @@ import {
   Spinner,
   Subtitle1,
   Tag,
-  Title2,
   Tooltip,
   makeStyles,
   mergeClasses,
@@ -41,6 +40,7 @@ import { useI18n } from "../i18n";
 import { AppCardDialog, type AppCardDraft } from "../components/AppCardDialog";
 import { TextPromptDialog } from "../components/TextPromptDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 
 const UNGROUPED = "__ungrouped__" as const;
 type SectionId = string | typeof UNGROUPED;
@@ -60,19 +60,6 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "20px",
-  },
-  header: {
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: "16px",
-    paddingBottom: "12px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexWrap: "wrap",
-  },
-  headerActions: {
-    display: "flex",
-    gap: "8px",
   },
   filters: {
     display: "flex",
@@ -810,35 +797,30 @@ export function AppsPage({ teamId }: Props) {
   return (
     <div className={styles.pageScroll}>
       <div className={styles.page}>
-        <header className={styles.header}>
-          <div>
-            <Title2>{t.appsTitle}</Title2>
-            <Caption1
-              block
-              style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}
-            >
-              {t.appsSubtitle}
-            </Caption1>
-          </div>
-          <div className={styles.headerActions}>
-            <Button
-              appearance="secondary"
-              icon={<FolderAddRegular />}
-              onClick={() => setCreatingGroup(true)}
-            >
-              {t.appsNewGroup}
-            </Button>
-            {canManage && (
+        <PageHeader
+          title={t.appsTitle}
+          subtitle={t.appsSubtitle}
+          actions={
+            <>
               <Button
-                appearance="primary"
-                icon={<AddRegular />}
-                onClick={() => setCreatingCard(true)}
+                appearance="secondary"
+                icon={<FolderAddRegular />}
+                onClick={() => setCreatingGroup(true)}
               >
-                {t.appsNewApp}
+                {t.appsNewGroup}
               </Button>
-            )}
-          </div>
-        </header>
+              {canManage && (
+                <Button
+                  appearance="primary"
+                  icon={<AddRegular />}
+                  onClick={() => setCreatingCard(true)}
+                >
+                  {t.appsNewApp}
+                </Button>
+              )}
+            </>
+          }
+        />
 
         <div className={styles.filters}>
           <div className={styles.filterRow}>

@@ -18,7 +18,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
-  Body1,
   Body2,
   Button,
   Caption1,
@@ -41,7 +40,6 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
-  Title2,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -57,6 +55,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useI18n } from "../i18n";
+import { PageHeader } from "../components/PageHeader";
 import type { TeamRole } from "../types";
 
 /** Mirrors the worker's canManage rule. */
@@ -110,15 +109,6 @@ const useStyles = makeStyles({
     flexDirection: "column",
     gap: "20px",
   },
-  header: {
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: "16px",
-    paddingBottom: "12px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-  },
-  headerActions: { display: "flex", gap: "8px" },
   card: {
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusLarge,
@@ -180,6 +170,9 @@ const useStyles = makeStyles({
   emptyHint: {
     color: tokens.colorNeutralForeground3,
     fontStyle: "italic",
+  },
+  tableScroll: {
+    overflowX: "auto",
   },
 });
 
@@ -295,29 +288,27 @@ export function NextBridgeConfigPage({ teamId }: Props) {
   return (
     <div className={styles.pageScroll}>
       <div className={styles.page}>
-        <div className={styles.header}>
-          <div>
-            <Title2 block>{t.bridgeTitle}</Title2>
-            <Body1 block style={{ color: tokens.colorNeutralForeground3 }}>
-              {t.bridgeSubtitle}
-            </Body1>
-          </div>
-          <div className={styles.headerActions}>
-            <Button
-              appearance="subtle"
-              icon={<ArrowClockwiseRegular />}
-              onClick={() => {
-                void fetchList();
-                void refreshSelected();
-              }}
-            >
-              {t.refresh}
-            </Button>
-            {canManage && (
-              <PairButton teamId={teamId} onPaired={() => void fetchList()} />
-            )}
-          </div>
-        </div>
+        <PageHeader
+          title={t.bridgeTitle}
+          subtitle={t.bridgeSubtitle}
+          actions={
+            <>
+              <Button
+                appearance="subtle"
+                icon={<ArrowClockwiseRegular />}
+                onClick={() => {
+                  void fetchList();
+                  void refreshSelected();
+                }}
+              >
+                {t.refresh}
+              </Button>
+              {canManage && (
+                <PairButton teamId={teamId} onPaired={() => void fetchList()} />
+              )}
+            </>
+          }
+        />
 
         {error && (
           <MessageBar intent="error">
@@ -535,24 +526,26 @@ function DriversCard({
         ) : drivers.length === 0 ? (
           <Body2 className={styles.emptyHint}>{t.bridgeDriversEmpty}</Body2>
         ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColInstance}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColPlatform}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {drivers.map((d) => (
-                <TableRow key={d.instance_id}>
-                  <TableCell>
-                    <span className={styles.mono}>{d.instance_id}</span>
-                  </TableCell>
-                  <TableCell>{d.platform ?? "—"}</TableCell>
+          <div className={styles.tableScroll}>
+            <Table size="small">
+              <TableHeader>
+                <TableRow>
+                  <TableHeaderCell>{t.bridgeColInstance}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColPlatform}</TableHeaderCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {drivers.map((d) => (
+                  <TableRow key={d.instance_id}>
+                    <TableCell>
+                      <span className={styles.mono}>{d.instance_id}</span>
+                    </TableCell>
+                    <TableCell>{d.platform ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>
@@ -580,28 +573,30 @@ function RulesCard({
         ) : rules.length === 0 ? (
           <Body2 className={styles.emptyHint}>{t.bridgeRulesEmpty}</Body2>
         ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColRuleId}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColRuleType}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColRuleSummary}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rules.map((r, idx) => (
-                <TableRow key={String(r.id ?? idx)}>
-                  <TableCell>
-                    <span className={styles.mono}>{String(r.id ?? "")}</span>
-                  </TableCell>
-                  <TableCell>{String(r.type ?? "forward")}</TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{summarizeRule(r)}</span>
-                  </TableCell>
+          <div className={styles.tableScroll}>
+            <Table size="small">
+              <TableHeader>
+                <TableRow>
+                  <TableHeaderCell>{t.bridgeColRuleId}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColRuleType}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColRuleSummary}</TableHeaderCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {rules.map((r, idx) => (
+                  <TableRow key={String(r.id ?? idx)}>
+                    <TableCell>
+                      <span className={styles.mono}>{String(r.id ?? "")}</span>
+                    </TableCell>
+                    <TableCell>{String(r.type ?? "forward")}</TableCell>
+                    <TableCell>
+                      <span className={styles.mono}>{summarizeRule(r)}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>
@@ -635,58 +630,60 @@ function EventsCard({ events }: { events: EventEntry[] | null }) {
         ) : events.length === 0 ? (
           <Body2 className={styles.emptyHint}>{t.bridgeEventsEmpty}</Body2>
         ) : (
-          <Table size="small">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>{t.bridgeColEventTime}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventTopic}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventGroup}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventPlatform}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventChannel}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventUser}</TableHeaderCell>
-                <TableHeaderCell>{t.bridgeColEventDetail}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.slice(0, 50).map((ev, idx) => {
-                const row = decomposeEvent(ev);
-                return (
-                  <TableRow key={idx}>
-                    <TableCell>
-                      <span className={styles.mono}>{row.time}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={styles.mono}>{row.topic}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={styles.mono}>{row.ruleIds || "—"}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={styles.mono}>{row.platform || "—"}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={styles.mono}>{row.channel || "—"}</span>
-                    </TableCell>
-                    <TableCell>{row.user || "—"}</TableCell>
-                    <TableCell>
-                      <span
-                        style={{
-                          whiteSpace: "nowrap",
-                          textOverflow: "ellipsis",
-                          overflow: "hidden",
-                          maxWidth: 360,
-                          display: "inline-block",
-                        }}
-                        title={row.detailFull}
-                      >
-                        {row.detail || "—"}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className={styles.tableScroll}>
+            <Table size="small">
+              <TableHeader>
+                <TableRow>
+                  <TableHeaderCell>{t.bridgeColEventTime}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventTopic}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventGroup}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventPlatform}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventChannel}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventUser}</TableHeaderCell>
+                  <TableHeaderCell>{t.bridgeColEventDetail}</TableHeaderCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.slice(0, 50).map((ev, idx) => {
+                  const row = decomposeEvent(ev);
+                  return (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        <span className={styles.mono}>{row.time}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={styles.mono}>{row.topic}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={styles.mono}>{row.ruleIds || "—"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={styles.mono}>{row.platform || "—"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={styles.mono}>{row.channel || "—"}</span>
+                      </TableCell>
+                      <TableCell>{row.user || "—"}</TableCell>
+                      <TableCell>
+                        <span
+                          style={{
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                            maxWidth: 360,
+                            display: "inline-block",
+                          }}
+                          title={row.detailFull}
+                        >
+                          {row.detail || "—"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>

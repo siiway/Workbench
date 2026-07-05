@@ -7,7 +7,6 @@ import {
   MessageBarBody,
   Spinner,
   Subtitle1,
-  Title2,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -17,6 +16,7 @@ import {
 } from "@fluentui/react-icons";
 import { PERMISSION_KEYS, type PermissionKey, type TeamRole } from "../types";
 import { useI18n } from "../i18n";
+import { PageHeader } from "../components/PageHeader";
 
 type EditableRole = "admin" | "member";
 const EDITABLE_ROLES: EditableRole[] = ["admin", "member"];
@@ -51,14 +51,6 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "20px",
-  },
-  pageHeader: {
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: "16px",
-    paddingBottom: "12px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   card: {
     border: `1px solid ${tokens.colorNeutralStroke2}`,
@@ -130,6 +122,9 @@ const useStyles = makeStyles({
   },
   hint: {
     color: tokens.colorNeutralForeground3,
+  },
+  tableScroll: {
+    overflowX: "auto",
   },
 });
 
@@ -216,17 +211,10 @@ export function PermissionsPage({ teamId }: Props) {
   return (
     <div className={styles.pageScroll}>
       <div className={styles.page}>
-        <header className={styles.pageHeader}>
-        <div>
-          <Title2>{t.permissionsTitle}</Title2>
-          <Caption1
-            block
-            style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}
-          >
-            {t.permissionsReadOnlyHint}
-          </Caption1>
-        </div>
-      </header>
+        <PageHeader
+          title={t.permissionsTitle}
+          subtitle={t.permissionsReadOnlyHint}
+        />
 
       {error && (
         <MessageBar intent="warning">
@@ -312,59 +300,61 @@ export function PermissionsPage({ teamId }: Props) {
               >
                 {t.permTeamConfigHint}
               </Caption1>
-              <table className={styles.matrix}>
-                <thead>
-                  <tr>
-                    <th className={styles.th}>{t.permColPermission}</th>
-                    <th className={`${styles.th} ${styles.thRole}`}>
-                      {t.permColAdmin}
-                    </th>
-                    <th className={`${styles.th} ${styles.thRole}`}>
-                      {t.permColMember}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PERMISSION_KEYS.map((key) => (
-                    <tr key={key}>
-                      <td className={styles.td}>
-                        <span className={styles.permName}>{key}</span>
-                      </td>
-                      {EDITABLE_ROLES.map((role) => {
-                        const value =
-                          matrix.global?.[role]?.[key] ??
-                          matrix.defaults[role][key];
-                        const isDefault =
-                          matrix.global?.[role]?.[key] === undefined ||
-                          matrix.defaults[role][key] === value;
-                        return (
-                          <td
-                            key={role}
-                            className={`${styles.td} ${styles.tdRole}`}
-                          >
-                            {value ? (
-                              <CheckmarkCircleRegular
-                                fontSize={18}
-                                color={tokens.colorPaletteGreenForeground1}
-                              />
-                            ) : (
-                              <DismissCircleRegular
-                                fontSize={18}
-                                color={tokens.colorNeutralForeground4}
-                              />
-                            )}
-                            {!isDefault && (
-                              <span className={styles.custom}>
-                                {t.permCustom}
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
+              <div className={styles.tableScroll}>
+                <table className={styles.matrix}>
+                  <thead>
+                    <tr>
+                      <th className={styles.th}>{t.permColPermission}</th>
+                      <th className={`${styles.th} ${styles.thRole}`}>
+                        {t.permColAdmin}
+                      </th>
+                      <th className={`${styles.th} ${styles.thRole}`}>
+                        {t.permColMember}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {PERMISSION_KEYS.map((key) => (
+                      <tr key={key}>
+                        <td className={styles.td}>
+                          <span className={styles.permName}>{key}</span>
+                        </td>
+                        {EDITABLE_ROLES.map((role) => {
+                          const value =
+                            matrix.global?.[role]?.[key] ??
+                            matrix.defaults[role][key];
+                          const isDefault =
+                            matrix.global?.[role]?.[key] === undefined ||
+                            matrix.defaults[role][key] === value;
+                          return (
+                            <td
+                              key={role}
+                              className={`${styles.td} ${styles.tdRole}`}
+                            >
+                              {value ? (
+                                <CheckmarkCircleRegular
+                                  fontSize={18}
+                                  color={tokens.colorPaletteGreenForeground1}
+                                />
+                              ) : (
+                                <DismissCircleRegular
+                                  fontSize={18}
+                                  color={tokens.colorNeutralForeground4}
+                                />
+                              )}
+                              {!isDefault && (
+                                <span className={styles.custom}>
+                                  {t.permCustom}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

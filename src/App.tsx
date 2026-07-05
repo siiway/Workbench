@@ -34,6 +34,7 @@ import {
   KeybindProvider,
   useKeybindHandler,
 } from "./keybinds/KeybindProvider";
+import { useThemeStore, resolveDark } from "./store/theme";
 import type { TeamInfo } from "./types";
 
 const ACTIVE_TEAM_KEY = "workbench:activeTeamId";
@@ -65,15 +66,25 @@ const useStyles = makeStyles({
 });
 
 function useColorScheme() {
-  const [dark, setDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
+  const mode = useThemeStore((s) => s.mode);
+  const [dark, setDark] = useState(() => resolveDark(mode));
+
   useEffect(() => {
+    const isDark = resolveDark(mode);
+    setDark(isDark);
+    document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+    if (mode !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => setDark(e.matches);
+    const handler = (e: MediaQueryListEvent) => {
+      setDark(e.matches);
+      document.documentElement.setAttribute("data-theme", e.matches ? "dark" : "light");
+      document.documentElement.style.colorScheme = e.matches ? "dark" : "light";
+    };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, []);
+  }, [mode]);
+
   return dark;
 }
 

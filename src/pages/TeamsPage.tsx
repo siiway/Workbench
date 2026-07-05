@@ -5,13 +5,15 @@ import {
   Card,
   CardHeader,
   Text,
-  Title2,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
 import { CheckmarkRegular, PeopleRegular } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
 import type { TeamInfo, TeamRole } from "../types";
+import { useI18n } from "../i18n";
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/EmptyState";
 
 const ROLE_COLORS: Record<TeamRole, "brand" | "success" | "informative" | "subtle"> = {
   owner: "success",
@@ -29,12 +31,6 @@ const useStyles = makeStyles({
     boxSizing: "border-box",
     height: "100%",
     overflowY: "auto",
-  },
-  header: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-    marginBottom: "16px",
   },
   grid: {
     display: "grid",
@@ -57,11 +53,6 @@ const useStyles = makeStyles({
     justifyContent: "space-between",
     gap: "8px",
   },
-  empty: {
-    padding: "48px 0",
-    textAlign: "center",
-    color: tokens.colorNeutralForeground3,
-  },
 });
 
 type Props = {
@@ -73,6 +64,7 @@ type Props = {
 export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
   const styles = useStyles();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const handlePick = (id: string) => {
     onTeamChange(id);
@@ -81,21 +73,14 @@ export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>
-        <Title2>Teams</Title2>
-        <Text style={{ color: tokens.colorNeutralForeground3 }}>
-          Pick a team to load its workspace.
-        </Text>
-      </div>
+      <PageHeader title={t.teamsTitle} subtitle={t.teamsSubtitle} />
 
       {teams.length === 0 ? (
         <Card>
-          <div className={styles.empty}>
-            <PeopleRegular fontSize={32} color={tokens.colorNeutralForeground3} />
-            <Text block style={{ marginTop: "8px" }}>
-              You don't belong to any teams yet.
-            </Text>
-          </div>
+          <EmptyState
+            icon={<PeopleRegular />}
+            title={t.teamsEmpty}
+          />
         </Card>
       ) : (
         <div className={styles.grid}>
@@ -129,7 +114,7 @@ export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
                   </Badge>
                   {active ? (
                     <Badge appearance="tint" color="brand" icon={<CheckmarkRegular />}>
-                      Active
+                      {t.teamsActive}
                     </Badge>
                   ) : (
                     <Button
@@ -140,7 +125,7 @@ export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
                         handlePick(team.id);
                       }}
                     >
-                      Switch
+                      {t.teamsSwitch}
                     </Button>
                   )}
                 </div>

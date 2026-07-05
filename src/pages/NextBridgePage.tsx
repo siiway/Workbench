@@ -15,7 +15,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Avatar,
-  Body1,
   Body2,
   Button,
   Caption1,
@@ -32,7 +31,6 @@ import {
   Spinner,
   Subtitle1,
   Textarea,
-  Title2,
   makeStyles,
   mergeClasses,
   tokens,
@@ -50,6 +48,7 @@ import {
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
+import { PageHeader } from "../components/PageHeader";
 
 type Instance = {
   id: string;
@@ -132,8 +131,6 @@ const useStyles = makeStyles({
     padding: "16px 24px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
-  headerLeft: { display: "flex", flexDirection: "column", gap: "2px" },
-  headerActions: { display: "flex", gap: "8px", alignItems: "center" },
   layout: {
     flex: 1,
     display: "flex",
@@ -693,35 +690,40 @@ export function NextBridgePage({ teamId }: Props) {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <Title2>{t.bridgeTitle}</Title2>
-          <Body1 style={{ color: tokens.colorNeutralForeground3 }}>
-            {connected ? t.bridgeConnected : t.bridgeDisconnected}
-            {status?.meta.instance_name ? ` · ${status.meta.instance_name}` : ""}
-          </Body1>
-        </div>
-        <div className={styles.headerActions}>
-          <Button
-            appearance="subtle"
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void fetchList();
-              void fetchStatusAndChannels();
-              void fetchMessages();
-            }}
-          >
-            {t.refresh}
-          </Button>
-          {canManage && (
-            <Button
-              appearance="subtle"
-              icon={<SettingsRegular />}
-              onClick={() => navigate("/bridge/config")}
-            >
-              {t.bridgeConfigure}
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          title={t.bridgeTitle}
+          subtitle={
+            <>
+              {connected ? t.bridgeConnected : t.bridgeDisconnected}
+              {status?.meta.instance_name ? ` · ${status.meta.instance_name}` : ""}
+            </>
+          }
+          actions={
+            <>
+              <Button
+                appearance="subtle"
+                icon={<ArrowClockwiseRegular />}
+                onClick={() => {
+                  void fetchList();
+                  void fetchStatusAndChannels();
+                  void fetchMessages();
+                }}
+              >
+                {t.refresh}
+              </Button>
+              {canManage && (
+                <Button
+                  appearance="subtle"
+                  icon={<SettingsRegular />}
+                  onClick={() => navigate("/bridge/config")}
+                >
+                  {t.bridgeConfigure}
+                </Button>
+              )}
+            </>
+          }
+          style={{ marginBottom: 0 }}
+        />
       </div>
 
       {error && (

@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SiiWay Workbench</title>
+    <script>
+      // Prevent theme flash: apply dark/light before React hydrates.
+      // Reads explicit choice from localStorage first, then falls back to OS preference.
+      (function () {
+        try {
+          var mode = localStorage.getItem("prism_theme_mode");
+          var dark = mode === "dark" || (mode !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          if (dark) document.documentElement.style.backgroundColor = "#1f1f1f";
+          else document.documentElement.style.backgroundColor = "#ffffff";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

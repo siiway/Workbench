@@ -3,7 +3,6 @@ import {
   Button,
   Field,
   Input,
-  Title2,
   Subtitle2,
   Body2,
   Caption1,
@@ -20,7 +19,10 @@ import {
 import type { SelectTabData } from "@fluentui/react-components";
 import { LockClosed20Regular } from "@fluentui/react-icons";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 import { KeybindsSettings } from "../components/KeybindsSettings";
+import { PageHeader } from "../components/PageHeader";
+import { PasswordInput } from "../components/PasswordInput";
 import type { TeamInfo } from "../types";
 
 const useStyles = makeStyles({
@@ -57,6 +59,9 @@ const useStyles = makeStyles({
     display: "flex",
     gap: tokens.spacingHorizontalS,
   },
+  tableScroll: {
+    overflowX: "auto",
+  },
 });
 
 // ─── Global settings tab ────────────────────────────────────────────────────
@@ -74,6 +79,7 @@ type GlobalConfig = {
 
 function GlobalSettings({ canEdit }: { canEdit: boolean }) {
   const styles = useStyles();
+  const { t } = useI18n();
   const [form, setForm] = useState<GlobalConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,7 +90,7 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => setForm(d as GlobalConfig))
-      .catch(() => setError("Failed to load settings."))
+      .catch(() => setError(t.settingsFailedToLoad))
       .finally(() => setLoading(false));
   }, []);
 
@@ -105,55 +111,55 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
       });
       if (!res.ok) {
         const d: { error?: string } = await res.json();
-        setError(d.error ?? "Save failed");
+        setError(d.error ?? t.saveFailed);
         return;
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch {
-      setError("Network error");
+      setError(t.networkError);
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <Spinner label="Loading…" />;
-  if (!form) return <MessageBar intent="error"><MessageBarBody>{error || "Failed to load."}</MessageBarBody></MessageBar>;
+  if (loading) return <Spinner label={t.loading} />;
+  if (!form) return <MessageBar intent="error"><MessageBarBody>{error || t.settingsFailedToLoad}</MessageBarBody></MessageBar>;
 
   return (
     <form className={styles.body} onSubmit={(e) => void save(e)}>
       {!canEdit && (
         <MessageBar intent="warning">
-          <MessageBarBody>Read-only — only team owners and co-owners can modify global settings.</MessageBarBody>
+          <MessageBarBody>{t.settingsReadOnlyGlobal}</MessageBarBody>
         </MessageBar>
       )}
       {error && <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar>}
-      {success && <MessageBar intent="success"><MessageBarBody>Settings saved.</MessageBarBody></MessageBar>}
+      {success && <MessageBar intent="success"><MessageBarBody>{t.settingsSaved}</MessageBarBody></MessageBar>}
 
       <div className={styles.section}>
-        <Subtitle2>Prism Identity Provider</Subtitle2>
+        <Subtitle2>{t.settingsPrismIdp}</Subtitle2>
         <Divider />
-        <Field label="Base URL">
+        <Field label={t.settingsFieldBaseUrl}>
           <Input value={form.prism_base_url} onChange={set("prism_base_url")} disabled={!canEdit} />
         </Field>
-        <Field label="Client ID">
+        <Field label={t.settingsFieldClientId}>
           <Input value={form.prism_client_id} onChange={set("prism_client_id")} disabled={!canEdit} />
         </Field>
-        <Field label="Client Secret" hint="Leave blank to use PKCE. Shows masked if a secret is stored.">
-          <Input
-            type="password"
-            placeholder={form.use_pkce ? "Not set — using PKCE" : "Enter new secret to change"}
+        <Field label={t.settingsFieldClientSecret} hint={t.settingsFieldClientSecretHint}>
+          <PasswordInput
+            placeholder={form.use_pkce ? t.settingsSecretNotSet : t.settingsSecretChange}
             value={form.prism_client_secret}
             onChange={set("prism_client_secret")}
             disabled={!canEdit}
+            autoComplete="current-password"
             contentBefore={form.use_pkce ? undefined : <LockClosed20Regular />}
           />
         </Field>
-        <Field label="Redirect URI">
+        <Field label={t.settingsFieldRedirectUri}>
           <Input value={form.prism_redirect_uri} onChange={set("prism_redirect_uri")} disabled={!canEdit} />
         </Field>
         <div className={styles.readonlyNote}>
-          <Caption1>Auth mode:</Caption1>
+          <Caption1>{t.settingsAuthMode}</Caption1>
           <Badge appearance="tint" color={form.use_pkce ? "success" : "informative"}>
             {form.use_pkce ? "PKCE" : "Client Secret"}
           </Badge>
@@ -161,12 +167,12 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div className={styles.section}>
-        <Subtitle2>Default Glint Instance</Subtitle2>
+        <Subtitle2>{t.settingsDefaultGlint}</Subtitle2>
         <Divider />
         <Body2 style={{ color: tokens.colorNeutralForeground3 }}>
-          Used for teams that don't have a team-specific Glint URL configured.
+          {t.settingsDefaultGlintHint}
         </Body2>
-        <Field label="Default Glint Base URL">
+        <Field label={t.settingsFieldDefaultGlintUrl}>
           <Input
             placeholder="https://glint.example.com"
             value={form.glint_base_url}
@@ -175,8 +181,8 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
           />
         </Field>
         <Field
-          label="Glint Prism client ID"
-          hint="Glint's client_id in Prism. Required for Workbench to request app:<id>:<scope> cross-app scopes during OAuth. Leave empty if Glint is colocated with this Workbench (uses /api/workbench/* fallback)."
+          label={t.settingsFieldGlintClientId}
+          hint={t.settingsFieldGlintClientIdHint}
         >
           <Input
             placeholder="prism_xxxxxxxxxxxx"
@@ -188,9 +194,9 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div className={styles.section}>
-        <Subtitle2>Session</Subtitle2>
+        <Subtitle2>{t.settingsSession}</Subtitle2>
         <Divider />
-        <Field label="Session TTL (seconds)" hint="0 = use token expiry. Minimum: 86400 (24 h).">
+        <Field label={t.settingsFieldSessionTtl} hint={t.settingsFieldSessionTtlHint}>
           <Input
             type="number"
             value={String(form.session_ttl)}
@@ -199,14 +205,14 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
           />
         </Field>
         <Body2 style={{ color: tokens.colorNeutralForeground3 }}>
-          Changes take effect on next login. Existing sessions are not affected.
+          {t.settingsSessionTtlNote}
         </Body2>
       </div>
 
       {canEdit && (
         <div className={styles.actions}>
           <Button type="submit" appearance="primary" disabled={saving}>
-            {saving ? "Saving…" : "Save Changes"}
+            {saving ? t.saving : t.saveChanges}
           </Button>
         </div>
       )}
@@ -220,6 +226,7 @@ type TeamConfig = { glint_base_url: string };
 
 function TeamSettings({ teams }: { teams: TeamInfo[] }) {
   const styles = useStyles();
+  const { t } = useI18n();
   const [activeTeamId, setActiveTeamId] = useState(teams[0]?.id ?? "");
   const [configs, setConfigs] = useState<Record<string, TeamConfig>>({});
   const [saving, setSaving] = useState(false);
@@ -235,7 +242,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
     fetch(`/api/teams/${activeTeamId}/settings`)
       .then((r) => r.json())
       .then((d) => setConfigs((prev) => ({ ...prev, [activeTeamId]: d as TeamConfig })))
-      .catch(() => setError("Failed to load team settings."));
+      .catch(() => setError(t.settingsFailedToLoad));
   }, [activeTeamId, configs]);
 
   async function save(e: React.FormEvent) {
@@ -251,25 +258,24 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
       });
       if (!res.ok) {
         const d: { error?: string } = await res.json();
-        setError(d.error ?? "Save failed");
+        setError(d.error ?? t.saveFailed);
         return;
       }
       setSuccess(activeTeamId);
       setTimeout(() => setSuccess(""), 3000);
     } catch {
-      setError("Network error");
+      setError(t.networkError);
     } finally {
       setSaving(false);
     }
   }
 
   if (teams.length === 0) {
-    return <Body2 style={{ color: tokens.colorNeutralForeground3 }}>No teams available.</Body2>;
+    return <Body2 style={{ color: tokens.colorNeutralForeground3 }}>{t.settingsNoTeams}</Body2>;
   }
 
   return (
     <form className={styles.body} onSubmit={(e) => void save(e)}>
-      {/* Team selector */}
       <TabList
         selectedValue={activeTeamId}
         onTabSelect={(_, d: SelectTabData) => {
@@ -284,24 +290,24 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
       </TabList>
 
       {error && <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar>}
-      {success === activeTeamId && <MessageBar intent="success"><MessageBarBody>Team settings saved.</MessageBarBody></MessageBar>}
+      {success === activeTeamId && <MessageBar intent="success"><MessageBarBody>{t.settingsTeamSaved}</MessageBarBody></MessageBar>}
 
       {!canEdit && (
         <MessageBar intent="warning">
-          <MessageBarBody>Read-only — only owners and co-owners of this team can edit its settings.</MessageBarBody>
+          <MessageBarBody>{t.settingsReadOnlyTeam}</MessageBarBody>
         </MessageBar>
       )}
 
       {configs[activeTeamId] === undefined ? (
-        <Spinner label="Loading…" />
+        <Spinner label={t.loading} />
       ) : (
         <div className={styles.section}>
-          <Subtitle2>Glint Instance</Subtitle2>
+          <Subtitle2>{t.settingsTeamGlintInstance}</Subtitle2>
           <Divider />
           <Body2 style={{ color: tokens.colorNeutralForeground3 }}>
-            Overrides the global default Glint URL for this team only.
+            {t.settingsTeamGlintHint}
           </Body2>
-          <Field label="Glint Base URL" hint="Leave blank to use the global default.">
+          <Field label={t.settingsTeamGlintUrl} hint={t.settingsTeamGlintUrlHint}>
             <Input
               placeholder="https://glint.example.com"
               value={form.glint_base_url}
@@ -320,7 +326,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
       {canEdit && configs[activeTeamId] !== undefined && (
         <div className={styles.actions}>
           <Button type="submit" appearance="primary" disabled={saving}>
-            {saving ? "Saving…" : "Save Changes"}
+            {saving ? t.saving : t.saveChanges}
           </Button>
         </div>
       )}
@@ -332,6 +338,7 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
 
 export function SettingsPage() {
   const styles = useStyles();
+  const { t } = useI18n();
   const { user } = useAuth();
   const [tab, setTab] = useState<"global" | "team" | "keybinds">("global");
 
@@ -341,16 +348,16 @@ export function SettingsPage() {
 
   return (
     <div className={styles.root}>
-      <Title2>Settings</Title2>
+      <PageHeader title={t.settingsTitle} />
       <TabList
         selectedValue={tab}
         onTabSelect={(_, d: SelectTabData) =>
           setTab(d.value as "global" | "team" | "keybinds")
         }
       >
-        <Tab value="global">Global</Tab>
-        <Tab value="team">Teams</Tab>
-        <Tab value="keybinds">Keybinds</Tab>
+        <Tab value="global">{t.settingsTabGlobal}</Tab>
+        <Tab value="team">{t.settingsTabTeams}</Tab>
+        <Tab value="keybinds">{t.settingsTabKeybinds}</Tab>
       </TabList>
 
       {tab === "global" && <GlobalSettings canEdit={canEditGlobal} />}

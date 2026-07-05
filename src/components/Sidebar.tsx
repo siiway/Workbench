@@ -25,11 +25,15 @@ import {
   AppsRegular,
   WindowConsoleRegular,
   BranchForkRegular,
+  DesktopRegular,
+  WeatherSunnyRegular,
+  WeatherMoonRegular,
 } from "@fluentui/react-icons";
 import { NavLink, useNavigate } from "react-router-dom";
 import type { TeamInfo, TeamRole } from "../types";
 import { useAuth } from "../auth";
 import { useI18n } from "../i18n";
+import { useThemeStore, type ThemeMode } from "../store/theme";
 
 const ROLE_COLORS: Record<TeamRole, "brand" | "success" | "informative" | "subtle"> = {
   owner: "success",
@@ -64,6 +68,7 @@ const useStyles = makeStyles({
     gap: "2px",
   },
   navItem: {
+    position: "relative",
     display: "flex",
     alignItems: "center",
     gap: "10px",
@@ -72,6 +77,8 @@ const useStyles = makeStyles({
     textDecoration: "none",
     color: tokens.colorNeutralForeground2,
     fontSize: tokens.fontSizeBase300,
+    transitionProperty: "background, color",
+    transitionDuration: "0.1s",
     ":hover": {
       background: tokens.colorNeutralBackground3,
       color: tokens.colorNeutralForeground1,
@@ -82,6 +89,17 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     fontWeight: tokens.fontWeightSemibold,
     ":hover": { background: tokens.colorNeutralBackground3Hover },
+    // Accent rail on the left edge
+    "::before": {
+      content: '""',
+      position: "absolute",
+      left: 0,
+      top: "6px",
+      bottom: "6px",
+      width: "3px",
+      borderRadius: "2px",
+      background: tokens.colorCompoundBrandForeground1,
+    },
   },
   teamArea: {
     padding: "12px",
@@ -141,8 +159,16 @@ export function Sidebar({ teams, activeTeamId }: Props) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { t, locale, setLocale } = useI18n();
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
 
   const activeTeam = teams.find((t) => t.id === activeTeamId);
+
+  const THEME_OPTIONS: { value: ThemeMode; icon: React.ReactElement; label: string }[] = [
+    { value: "system", icon: <DesktopRegular />, label: t.themeSystem },
+    { value: "light", icon: <WeatherSunnyRegular />, label: t.themeLight },
+    { value: "dark", icon: <WeatherMoonRegular />, label: t.themeDark },
+  ];
 
   return (
     <aside className={styles.sidebar}>
@@ -245,6 +271,39 @@ export function Sidebar({ teams, activeTeamId }: Props) {
               >
                 {t.settings}
               </MenuItem>
+              <Menu>
+                <MenuTrigger disableButtonEnhancement>
+                  <MenuItem
+                    icon={
+                      themeMode === "light"
+                        ? <WeatherSunnyRegular />
+                        : themeMode === "dark"
+                          ? <WeatherMoonRegular />
+                          : <DesktopRegular />
+                    }
+                  >
+                    {t.themeLabel}
+                  </MenuItem>
+                </MenuTrigger>
+                <MenuPopover>
+                  <MenuList>
+                    {THEME_OPTIONS.map((opt) => (
+                      <MenuItem
+                        key={opt.value}
+                        icon={opt.icon}
+                        onClick={() => setThemeMode(opt.value)}
+                        style={{
+                          fontWeight: themeMode === opt.value
+                            ? tokens.fontWeightSemibold
+                            : undefined,
+                        }}
+                      >
+                        {opt.label}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
               <MenuItem
                 icon={<GlobeRegular />}
                 onClick={() => setLocale(locale === "en" ? "zh" : "en")}
