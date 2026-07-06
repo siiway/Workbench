@@ -261,7 +261,7 @@ export function DashboardPage({ teamId }: Props) {
                 header={<Text weight="semibold">{t.statMyClaims}</Text>}
               />
               <div style={{ padding: "0 16px 16px" }}>
-                <Title3>{overview.claimedByMe}</Title3>
+                <Title3>{overview.assignedToMe}</Title3>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                   {t.statMyClaimsDesc}
                 </Text>
@@ -323,7 +323,7 @@ export function DashboardPage({ teamId }: Props) {
                           <Caption1 className={styles.rowMeta}>{todo.setName}</Caption1>
                         )}
                       </div>
-                      {todo.isClaimedByMe && (
+                      {todo.isAssignedToMe && (
                         <Badge appearance="tint" color="informative" size="small">
                           {t.claimedShort}
                         </Badge>

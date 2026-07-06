@@ -35,6 +35,7 @@ import {
   CommentRegular,
   PersonAvailableRegular,
   PersonDeleteRegular,
+  PeopleRegular,
   CheckmarkRegular,
   DismissRegular,
   MoreHorizontalRegular,
@@ -42,7 +43,7 @@ import {
   ChevronRightRegular,
 } from "@fluentui/react-icons";
 import { useNavigate } from "react-router-dom";
-import type { TodoSet, Todo, Comment } from "../types";
+import type { TodoSet, Todo, Comment, Assignee } from "../types";
 import { usePermissions } from "../hooks/usePermissions";
 import { useRealtimeSync, type WsEvent } from "../hooks/useRealtimeSync";
 import { CommentsDialog } from "../components/CommentsDialog";
@@ -251,6 +252,22 @@ type ApiTodoListResp = {
   error?: string;
 };
 
+type AssignedGroup = {
+  setId: string;
+  setName: string | null;
+  todos: Array<{
+    id: string;
+    setId: string;
+    parentId: string | null;
+    title: string;
+    completed: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+};
+
+const ASSIGNED_VIEW_ID = "assigned-to-me";
+
 export function TasksPage({ teamId }: Props) {
   const styles = useStyles();
   const navigate = useNavigate();
@@ -261,6 +278,7 @@ export function TasksPage({ teamId }: Props) {
   const [sets, setSets] = useState<TodoSet[]>([]);
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [assignedGroups, setAssignedGroups] = useState<AssignedGroup[]>([]);
   const [setsLoading, setSetsLoading] = useState(true);
   const [todosLoading, setTodosLoading] = useState(false);
   const [glintError, setGlintError] = useState<string | null>(null);
@@ -290,6 +308,7 @@ export function TasksPage({ teamId }: Props) {
     });
 
   const [commentTodoId, setCommentTodoId] = useState<string | null>(null);
+  const isAssignedView = activeSetId === ASSIGNED_VIEW_ID;
 
   // Set management dialogs
   const [createSetOpen, setCreateSetOpen] = useState(false);
@@ -345,7 +364,7 @@ export function TasksPage({ teamId }: Props) {
   useEffect(() => { void loadSets(); }, [teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadTodos = useCallback(async () => {
-    if (!activeSetId) return;
+    if (!activeSetId || isAssignedView) return;
     setTodosLoading(true);
     setTodosError(null);
     try {
@@ -370,9 +389,38 @@ export function TasksPage({ teamId }: Props) {
     } finally {
       setTodosLoading(false);
     }
-  }, [teamId, activeSetId]);
+  }, [teamId, activeSetId, isAssignedView]);
 
-  useEffect(() => { void loadTodos(); }, [loadTodos]);
+  const loadAssignedTodos = useCallback(async () => {
+    if (!isAssignedView) return;
+    setTodosLoading(true);
+    setTodosError(null);
+    try {
+      const r = await fetch(`/api/glint/teams/${teamId}/assigned-to-me`);
+      const text = await r.text();
+      let parsed: { groups?: AssignedGroup[]; error?: string };
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        setTodosError(`Unexpected response (${r.status}): ${text.slice(0, 500)}`);
+        return;
+      }
+      if (!r.ok) {
+        setTodosError(parsed.error ?? `Error ${r.status}: ${text.slice(0, 500)}`);
+        return;
+      }
+      setAssignedGroups(parsed.groups ?? []);
+    } catch (e) {
+      setTodosError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setTodosLoading(false);
+    }
+  }, [isAssignedView, teamId]);
+
+  useEffect(() => {
+    if (isAssignedView) void loadAssignedTodos();
+    else void loadTodos();
+  }, [isAssignedView, loadAssignedTodos, loadTodos]);
 
   // ── realtime ─────────────────────────────────────────────────────────────
 
@@ -402,15 +450,13 @@ export function TasksPage({ teamId }: Props) {
             order.has(t.id) ? { ...t, sortOrder: order.get(t.id)! } : t,
           ),
         );
-      } else if (event.type === "todo:claimed") {
+      } else if (event.type === "todo:assigned") {
         setTodos((prev) =>
           prev.map((t) =>
             t.id === event.id
               ? {
                   ...t,
-                  claimedBy: event.claimedBy,
-                  claimedByName: event.claimedByName,
-                  claimedByAvatar: event.claimedByAvatar,
+                  assignees: event.assignees,
                 }
               : t,
           ),
@@ -527,27 +573,38 @@ export function TasksPage({ teamId }: Props) {
   }
 
   async function toggleClaim(todo: Todo) {
-    const res = await fetch(
-      `/api/glint/teams/${teamId}/todos/${todo.id}/claim`,
-      { method: "POST" },
-    );
-    if (!res.ok) return;
-    const data: {
-      claimedBy: string | null;
-      claimedByName: string | null;
-      claimedByAvatar: string | null;
-    } = await res.json();
+    if (!myId) return;
+    const alreadyAssigned = todo.assignees.some((a) => a.userId === myId);
+    const nextAssignees: Assignee[] = alreadyAssigned
+      ? todo.assignees.filter((a) => a.userId !== myId)
+      : [
+          ...todo.assignees,
+          {
+            userId: myId,
+            name: user?.displayName ?? user?.username ?? null,
+            username: user?.username ?? null,
+            avatarUrl: user?.avatarUrl ?? null,
+          },
+        ];
+    const prevTodos = todos;
     setTodos((prev) =>
-      prev.map((t) =>
-        t.id === todo.id
-          ? {
-              ...t,
-              claimedBy: data.claimedBy,
-              claimedByName: data.claimedByName,
-              claimedByAvatar: data.claimedByAvatar,
-            }
-          : t,
-      ),
+      prev.map((t) => (t.id === todo.id ? { ...t, assignees: nextAssignees } : t)),
+    );
+    const res = await fetch(
+      `/api/glint/teams/${teamId}/todos/${todo.id}/assignees`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: nextAssignees.map((a) => a.userId) }),
+      },
+    );
+    if (!res.ok) {
+      setTodos(prevTodos);
+      return;
+    }
+    const data: { assignees: Assignee[] } = await res.json();
+    setTodos((prev) =>
+      prev.map((t) => (t.id === todo.id ? { ...t, assignees: data.assignees } : t)),
     );
   }
 
@@ -732,7 +789,7 @@ export function TasksPage({ teamId }: Props) {
     hasChildren?: boolean,
   ) {
     const isOwn = todo.userId === myId;
-    const isClaimedByMe = !!myId && todo.claimedBy === myId;
+    const isClaimedByMe = !!myId && todo.assignees.some((a) => a.userId === myId);
     const canEdit = isOwn ? can("edit_own_todos") : can("edit_any_todo");
     const canDel = isOwn ? can("delete_own_todos") : can("delete_any_todo");
     const canToggle = isOwn || can("complete_any_todo");
@@ -822,7 +879,7 @@ export function TasksPage({ teamId }: Props) {
             >
               {todo.title}
             </Text>
-            {todo.claimedBy && (
+            {todo.assignees.length > 0 && (
               <Badge
                 appearance="tint"
                 color={isClaimedByMe ? "informative" : "subtle"}
@@ -830,8 +887,8 @@ export function TasksPage({ teamId }: Props) {
               >
                 {isClaimedByMe
                   ? t.claimedByYou
-                  : todo.claimedByName
-                    ? t.claimedBy(todo.claimedByName)
+                  : todo.assignees[0]?.name
+                    ? t.claimedBy(todo.assignees[0].name)
                     : t.claimedFallback}
               </Badge>
             )}
@@ -849,7 +906,7 @@ export function TasksPage({ teamId }: Props) {
               showActions && styles.actionsVisible,
             )}
           >
-            {can("claim_todos") && (
+            {can("assign_todos") && (
               <Tooltip content={isClaimedByMe ? t.release : t.claim} relationship="label">
                 <Button
                   appearance="subtle"
@@ -857,7 +914,7 @@ export function TasksPage({ teamId }: Props) {
                   icon={
                     isClaimedByMe ? <PersonDeleteRegular /> : <PersonAvailableRegular />
                   }
-                  disabled={!!todo.claimedBy && !isClaimedByMe}
+                  disabled={false}
                   onClick={() => void toggleClaim(todo)}
                 />
               </Tooltip>
@@ -950,7 +1007,20 @@ export function TasksPage({ teamId }: Props) {
           ) : sets.length === 0 ? (
             <Caption1 className={styles.empty}>{t.noSets}</Caption1>
           ) : (
-            sets.map((set, i) => {
+            <>
+            <div
+              className={mergeClasses(
+                styles.setItem,
+                isAssignedView && styles.setItemActive,
+              )}
+              onClick={() => setActiveSetId(ASSIGNED_VIEW_ID)}
+            >
+              <div className={styles.setRow}>
+                <Body2 className={styles.setName}>{t.statMyClaims}</Body2>
+                <PeopleRegular />
+              </div>
+            </div>
+            {sets.map((set, i) => {
               const canDrag = can("manage_sets");
               const canManage = can("manage_sets") || set.userId === myId;
               const isHovered = hoveredSetId === set.id;
@@ -1029,7 +1099,8 @@ export function TasksPage({ teamId }: Props) {
                   )}
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </aside>
@@ -1053,6 +1124,47 @@ export function TasksPage({ teamId }: Props) {
           </div>
         ) : !activeSetId ? (
           <Caption1 className={styles.empty}>{t.pickSet}</Caption1>
+        ) : isAssignedView ? (
+          <>
+            <div className={styles.mainHeader}>
+              <div className={styles.mainHeaderLeft}>
+                <Title2>{t.statMyClaims}</Title2>
+              </div>
+            </div>
+            <div className={styles.mainContent}>
+              {todosLoading ? (
+                <div className={styles.empty}>
+                  <Spinner />
+                </div>
+              ) : todosError ? (
+                <MessageBar intent="error">
+                  <MessageBarBody>{todosError}</MessageBarBody>
+                </MessageBar>
+              ) : assignedGroups.length === 0 ? (
+                <Caption1 className={styles.empty}>{t.emptyMyTasks}</Caption1>
+              ) : (
+                assignedGroups.map((group) => (
+                  <div key={group.setId} style={{ marginBottom: 20 }}>
+                    <Subtitle1 style={{ marginBottom: 8 }}>
+                      {group.setName ?? t.claimedFallback}
+                    </Subtitle1>
+                    {group.todos.map((todo) => (
+                      <div key={todo.id} className={styles.todoItem}>
+                        <Text className={styles.todoTitle}>{todo.title}</Text>
+                        <Button
+                          appearance="subtle"
+                          size="small"
+                          onClick={() => setActiveSetId(group.setId)}
+                        >
+                          {t.viewAllTasks}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         ) : (
           <>
             <div className={styles.mainHeader}>

@@ -20,7 +20,7 @@ export type TeamOverview = {
   total: number;
   completed: number;
   pending: number;
-  claimedByMe: number;
+  assignedToMe: number;
 };
 
 export type TodoSet = {
@@ -46,9 +46,8 @@ export type MyTodo = {
   userId: string;
   title: string;
   completed: boolean;
-  claimedBy: string | null;
   isMyTodo: boolean;
-  isClaimedByMe: boolean;
+  isAssignedToMe: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -75,7 +74,7 @@ export const PERMISSION_KEYS = [
   "delete_any_todo",
   "complete_any_todo",
   "add_subtodos",
-  "claim_todos",
+  "assign_todos",
   "reorder_todos",
   "comment",
   "delete_own_comments",
@@ -100,11 +99,16 @@ export type Todo = {
   completed: boolean;
   sortOrder: number;
   commentCount: number;
-  claimedBy: string | null;
-  claimedByName: string | null;
-  claimedByAvatar: string | null;
+  assignees: Assignee[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type Assignee = {
+  userId: string;
+  name: string | null;
+  username: string | null;
+  avatarUrl: string | null;
 };
 
 export type Comment = {
