@@ -3,8 +3,6 @@ import {
   Badge,
   Body2,
   Button,
-  Card,
-  CardHeader,
   Caption1,
   Spinner,
   Text,
@@ -31,44 +29,61 @@ import { EmptyState } from "../components/EmptyState";
 
 const useStyles = makeStyles({
   root: {
-    padding: "32px",
-    maxWidth: "1080px",
-    width: "100%",
-    margin: "0 auto",
+    padding: "20px 24px",
     boxSizing: "border-box",
     height: "100%",
     overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
   },
   configBanner: {
     padding: "16px",
-    borderRadius: "8px",
+    borderRadius: "10px",
     background: tokens.colorNeutralBackground3,
     border: `1px solid ${tokens.colorNeutralStroke1}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: "16px",
-    marginTop: "24px",
     flexWrap: "wrap",
   },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-    gap: "16px",
-    marginTop: "24px",
+    gap: "12px",
   },
   statCard: {
     display: "flex",
     flexDirection: "column",
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: "10px",
+    background: tokens.colorNeutralBackground1,
+    overflow: "hidden",
+    transition: "border-color 0.15s",
+    ":hover": {
+      borderTopColor: tokens.colorNeutralForeground1,
+      borderRightColor: tokens.colorNeutralForeground1,
+      borderBottomColor: tokens.colorNeutralForeground1,
+      borderLeftColor: tokens.colorNeutralForeground1,
+    },
+  },
+  statCardHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "14px 16px 0",
+  },
+  statCardBody: {
+    padding: "8px 16px 16px",
+    display: "flex",
+    flexDirection: "column",
     gap: "4px",
-    transition: "box-shadow 0.15s",
-    ":hover": { boxShadow: tokens.shadow8 },
   },
   twoCol: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: "16px",
-    marginTop: "24px",
+    gap: "12px",
     "@media (max-width: 900px)": {
       gridTemplateColumns: "1fr",
     },
@@ -76,10 +91,20 @@ const useStyles = makeStyles({
   listCard: {
     display: "flex",
     flexDirection: "column",
-    gap: "0",
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: "10px",
+    background: tokens.colorNeutralBackground1,
+    overflow: "hidden",
+  },
+  listCardHead: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "14px 16px",
+    gap: "10px",
   },
   listBody: {
-    padding: "0 16px 16px",
+    padding: "0 16px",
     display: "flex",
     flexDirection: "column",
   },
@@ -209,35 +234,31 @@ export function DashboardPage({ teamId }: Props) {
       {overview && !glintError && (
         <>
           <div className={styles.grid}>
-            <Card className={styles.statCard}>
-              <CardHeader
-                image={
-                  <ClipboardTaskListLtrRegular
-                    fontSize={24}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={<Text weight="semibold">{t.statPending}</Text>}
-              />
-              <div style={{ padding: "0 16px 16px" }}>
+            <div className={styles.statCard}>
+              <div className={styles.statCardHead}>
+                <ClipboardTaskListLtrRegular
+                  fontSize={24}
+                  color={tokens.colorBrandForeground1}
+                />
+                <Text weight="semibold">{t.statPending}</Text>
+              </div>
+              <div className={styles.statCardBody}>
                 <Title3>{overview.pending}</Title3>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                   {t.statPendingDesc}
                 </Text>
               </div>
-            </Card>
+            </div>
 
-            <Card className={styles.statCard}>
-              <CardHeader
-                image={
-                  <CheckmarkCircleRegular
-                    fontSize={24}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={<Text weight="semibold">{t.statCompleted}</Text>}
-              />
-              <div style={{ padding: "0 16px 16px" }}>
+            <div className={styles.statCard}>
+              <div className={styles.statCardHead}>
+                <CheckmarkCircleRegular
+                  fontSize={24}
+                  color={tokens.colorBrandForeground1}
+                />
+                <Text weight="semibold">{t.statCompleted}</Text>
+              </div>
+              <div className={styles.statCardBody}>
                 <Title3>
                   {overview.completed}
                   <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
@@ -248,63 +269,55 @@ export function DashboardPage({ teamId }: Props) {
                   {t.statCompletedDesc}
                 </Text>
               </div>
-            </Card>
+            </div>
 
-            <Card className={styles.statCard}>
-              <CardHeader
-                image={
-                  <PersonCircleRegular
-                    fontSize={24}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={<Text weight="semibold">{t.statMyClaims}</Text>}
-              />
-              <div style={{ padding: "0 16px 16px" }}>
+            <div className={styles.statCard}>
+              <div className={styles.statCardHead}>
+                <PersonCircleRegular
+                  fontSize={24}
+                  color={tokens.colorBrandForeground1}
+                />
+                <Text weight="semibold">{t.statMyClaims}</Text>
+              </div>
+              <div className={styles.statCardBody}>
                 <Title3>{overview.assignedToMe}</Title3>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                   {t.statMyClaimsDesc}
                 </Text>
               </div>
-            </Card>
+            </div>
 
-            <Card className={styles.statCard}>
-              <CardHeader
-                image={
-                  <AppsRegular
-                    fontSize={24}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={<Text weight="semibold">{t.statSets}</Text>}
-              />
-              <div style={{ padding: "0 16px 16px" }}>
+            <div className={styles.statCard}>
+              <div className={styles.statCardHead}>
+                <AppsRegular
+                  fontSize={24}
+                  color={tokens.colorBrandForeground1}
+                />
+                <Text weight="semibold">{t.statSets}</Text>
+              </div>
+              <div className={styles.statCardBody}>
                 <Title3>{overview.sets}</Title3>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                   {t.statSetsDesc}
                 </Text>
               </div>
-            </Card>
+            </div>
           </div>
 
           <div className={styles.twoCol}>
-            <Card className={styles.listCard}>
-              <CardHeader
-                image={
-                  <ClipboardTaskListLtrRegular
-                    fontSize={20}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <Text weight="semibold">{t.myTasks}</Text>
-                    <Badge appearance="tint" color="brand" size="small">
-                      {myTodos.length}
-                    </Badge>
-                  </div>
-                }
-              />
+            <div className={styles.listCard}>
+              <div className={styles.listCardHead}>
+                <ClipboardTaskListLtrRegular
+                  fontSize={20}
+                  color={tokens.colorBrandForeground1}
+                />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flex: 1 }}>
+                  <Text weight="semibold">{t.myTasks}</Text>
+                  <Badge appearance="tint" color="brand" size="small">
+                    {myTodos.length}
+                  </Badge>
+                </div>
+              </div>
               <div className={styles.listBody}>
                 {myTodos.length === 0 ? (
                   <EmptyState
@@ -343,25 +356,21 @@ export function DashboardPage({ teamId }: Props) {
                   {t.viewAllTasks}
                 </Button>
               </div>
-            </Card>
+            </div>
 
-            <Card className={styles.listCard}>
-              <CardHeader
-                image={
-                  <HistoryRegular
-                    fontSize={20}
-                    color={tokens.colorBrandForeground1}
-                  />
-                }
-                header={
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <Text weight="semibold">{t.recentActivity}</Text>
-                    <Badge appearance="tint" color="brand" size="small">
-                      {feed.length}
-                    </Badge>
-                  </div>
-                }
-              />
+            <div className={styles.listCard}>
+              <div className={styles.listCardHead}>
+                <HistoryRegular
+                  fontSize={20}
+                  color={tokens.colorBrandForeground1}
+                />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flex: 1 }}>
+                  <Text weight="semibold">{t.recentActivity}</Text>
+                  <Badge appearance="tint" color="brand" size="small">
+                    {feed.length}
+                  </Badge>
+                </div>
+              </div>
               <div className={styles.listBody}>
                 {feed.length === 0 ? (
                   <EmptyState
@@ -384,7 +393,18 @@ export function DashboardPage({ teamId }: Props) {
                   ))
                 )}
               </div>
-            </Card>
+              <div className={styles.cardFooter}>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  icon={<ArrowRightRegular />}
+                  iconPosition="after"
+                  onClick={() => navigate("/tasks")}
+                >
+                  {t.viewAllTasks}
+                </Button>
+              </div>
+            </div>
           </div>
         </>
       )}

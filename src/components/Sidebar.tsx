@@ -47,13 +47,13 @@ const useStyles = makeStyles({
     width: "240px",
     display: "flex",
     flexDirection: "column",
-    borderRight: `1px solid ${tokens.colorNeutralStroke1}`,
-    background: tokens.colorNeutralBackground2,
+    borderRight: `2px solid ${tokens.colorNeutralStroke1}`,
+    background: tokens.colorNeutralBackground1,
     flexShrink: 0,
     height: "100%",
   },
   logo: {
-    padding: "20px 16px",
+    padding: "16px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
     display: "flex",
     alignItems: "center",
@@ -72,8 +72,8 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    padding: "8px 12px",
-    borderRadius: "4px",
+    padding: "6px 10px",
+    borderRadius: "6px",
     textDecoration: "none",
     color: tokens.colorNeutralForeground2,
     fontSize: tokens.fontSizeBase300,
@@ -89,7 +89,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     fontWeight: tokens.fontWeightSemibold,
     ":hover": { background: tokens.colorNeutralBackground3Hover },
-    // Accent rail on the left edge
     "::before": {
       content: '""',
       position: "absolute",
@@ -103,7 +102,7 @@ const useStyles = makeStyles({
   },
   teamArea: {
     padding: "12px",
-    borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderTop: `2px solid ${tokens.colorNeutralStroke1}`,
     display: "flex",
     flexDirection: "column",
     gap: "8px",
@@ -122,7 +121,7 @@ const useStyles = makeStyles({
   },
   userArea: {
     padding: "12px",
-    borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderTop: `2px solid ${tokens.colorNeutralStroke1}`,
   },
 });
 

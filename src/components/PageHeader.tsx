@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     alignItems: "flex-start",
     flexWrap: "wrap",
     gap: "12px",
-    marginBottom: "24px",
+    marginBottom: "16px",
   },
   titles: {
     display: "flex",

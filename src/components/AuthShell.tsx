@@ -16,21 +16,16 @@ const useStyles = makeStyles({
     minHeight: "100vh",
     gap: "20px",
     padding: "32px 16px",
-    backgroundColor: tokens.colorNeutralBackground2,
+    backgroundColor: tokens.colorNeutralBackground1,
     position: "relative",
     overflow: "hidden",
-    backgroundImage: `
-      radial-gradient(ellipse at 20% 20%, color-mix(in srgb, ${tokens.colorBrandBackground} 8%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse at 80% 80%, color-mix(in srgb, ${tokens.colorBrandBackground} 8%, transparent) 0%, transparent 60%)
-    `,
   },
   card: {
-    "--auth-card-pad": "40px",
+    "--auth-card-pad": "32px",
     width: "100%",
-    borderRadius: "12px",
-    border: `1px solid ${tokens.colorNeutralStroke3}`,
+    borderRadius: "14px",
+    border: `2px solid ${tokens.colorNeutralStroke1}`,
     background: tokens.colorNeutralBackground1,
-    boxShadow: tokens.shadow16,
     display: "flex",
     flexDirection: "column",
     padding: "var(--auth-card-pad)",
@@ -42,7 +37,7 @@ const useStyles = makeStyles({
     animationTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
     animationFillMode: "both",
     "@media (max-width: 480px)": {
-      "--auth-card-pad": "28px",
+      "--auth-card-pad": "24px",
     },
     "@media (prefers-reduced-motion: reduce)": {
       animationName: "none",
@@ -60,7 +55,7 @@ type Props = {
 export function AuthShell({ children, maxWidth = 400, cardGap = 20, style }: Props) {
   const styles = useStyles();
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} auth-grid`}>
       <div
         className={styles.card}
         style={{

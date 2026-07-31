@@ -180,10 +180,9 @@ const useStyles = makeStyles({
     width: "min(640px, 92vw)",
     maxHeight: "min(50vh, 420px)",
     overflowY: "auto",
-    border: `1px solid ${tokens.colorNeutralStroke1}`,
-    borderRadius: tokens.borderRadiusLarge,
+    border: `2px solid ${tokens.colorNeutralStroke1}`,
+    borderRadius: "10px",
     backgroundColor: tokens.colorNeutralBackground1,
-    boxShadow: tokens.shadow28,
     zIndex: 1000,
     padding: "4px",
     fontFamily:

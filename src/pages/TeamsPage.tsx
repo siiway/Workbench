@@ -2,8 +2,6 @@ import {
   Avatar,
   Badge,
   Button,
-  Card,
-  CardHeader,
   Text,
   makeStyles,
   tokens,
@@ -24,10 +22,7 @@ const ROLE_COLORS: Record<TeamRole, "brand" | "success" | "informative" | "subtl
 
 const useStyles = makeStyles({
   root: {
-    padding: "32px",
-    maxWidth: "1080px",
-    width: "100%",
-    margin: "0 auto",
+    padding: "20px 24px",
     boxSizing: "border-box",
     height: "100%",
     overflowY: "auto",
@@ -35,19 +30,43 @@ const useStyles = makeStyles({
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: "16px",
+    gap: "12px",
   },
   card: {
     cursor: "pointer",
-    transition: "box-shadow 0.15s",
-    ":hover": { boxShadow: tokens.shadow8 },
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: "10px",
+    background: tokens.colorNeutralBackground1,
+    overflow: "hidden",
+    transition: "border-color 0.15s",
+    ":hover": {
+      borderTopColor: tokens.colorNeutralForeground1,
+      borderRightColor: tokens.colorNeutralForeground1,
+      borderBottomColor: tokens.colorNeutralForeground1,
+      borderLeftColor: tokens.colorNeutralForeground1,
+    },
+  },
+  cardHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "14px 16px 0",
+  },
+  cardInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    minWidth: 0,
+    flex: 1,
   },
   cardActive: {
-    boxShadow: tokens.shadow4,
-    border: `1px solid ${tokens.colorBrandStroke1}`,
+    borderTopColor: tokens.colorBrandStroke1,
+    borderRightColor: tokens.colorBrandStroke1,
+    borderBottomColor: tokens.colorBrandStroke1,
+    borderLeftColor: tokens.colorBrandStroke1,
   },
   cardBody: {
-    padding: "0 16px 16px",
+    padding: "12px 16px 16px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -76,38 +95,36 @@ export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
       <PageHeader title={t.teamsTitle} subtitle={t.teamsSubtitle} />
 
       {teams.length === 0 ? (
-        <Card>
+        <div className={styles.card} style={{ padding: "16px" }}>
           <EmptyState
             icon={<PeopleRegular />}
             title={t.teamsEmpty}
           />
-        </Card>
+        </div>
       ) : (
         <div className={styles.grid}>
           {teams.map((team) => {
             const active = team.id === activeTeamId;
             return (
-              <Card
+              <div
                 key={team.id}
                 className={`${styles.card} ${active ? styles.cardActive : ""}`}
                 onClick={() => handlePick(team.id)}
               >
-                <CardHeader
-                  image={
-                    <Avatar
-                      name={team.name}
-                      image={team.avatarUrl ? { src: team.avatarUrl } : undefined}
-                      size={40}
-                      shape="square"
-                    />
-                  }
-                  header={<Text weight="semibold">{team.name}</Text>}
-                  description={
+                <div className={styles.cardHead}>
+                  <Avatar
+                    name={team.name}
+                    image={team.avatarUrl ? { src: team.avatarUrl } : undefined}
+                    size={40}
+                    shape="square"
+                  />
+                  <div className={styles.cardInfo}>
+                    <Text weight="semibold">{team.name}</Text>
                     <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                       {team.id.slice(0, 12)}…
                     </Text>
-                  }
-                />
+                  </div>
+                </div>
                 <div className={styles.cardBody}>
                   <Badge appearance="filled" color={ROLE_COLORS[team.role]}>
                     {team.role}
@@ -129,7 +146,7 @@ export function TeamsPage({ teams, activeTeamId, onTeamChange }: Props) {
                     </Button>
                   )}
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>

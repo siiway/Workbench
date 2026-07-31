@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     alignItems: "center",
     textAlign: "center",
     gap: "8px",
-    padding: "48px 16px",
+    padding: "32px 16px",
   },
   iconCircle: {
     width: "56px",

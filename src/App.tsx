@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import {
   FluentProvider,
@@ -35,6 +35,7 @@ import {
   useKeybindHandler,
 } from "./keybinds/KeybindProvider";
 import { useThemeStore, resolveDark } from "./store/theme";
+import { patchTheme } from "./theme";
 import type { TeamInfo } from "./types";
 
 const ACTIVE_TEAM_KEY = "workbench:activeTeamId";
@@ -278,8 +279,13 @@ function KeybindWiring() {
 export default function App() {
   const dark = useColorScheme();
 
+  const theme = useMemo(() => {
+    const base = dark ? webDarkTheme : webLightTheme;
+    return patchTheme(base, dark);
+  }, [dark]);
+
   return (
-    <FluentProvider theme={dark ? webDarkTheme : webLightTheme} style={{ height: "100%" }}>
+    <FluentProvider theme={theme} style={{ height: "100%" }}>
       <I18nProvider>
         <AuthProvider>
           <Routes>

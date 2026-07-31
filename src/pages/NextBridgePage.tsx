@@ -128,7 +128,7 @@ const useStyles = makeStyles({
     alignItems: "center",
     justifyContent: "space-between",
     gap: "16px",
-    padding: "16px 24px",
+    padding: "12px 24px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   layout: {

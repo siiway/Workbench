@@ -100,18 +100,15 @@ type RpcResult<T> = { ok: boolean; data?: T; error?: string };
 const useStyles = makeStyles({
   pageScroll: { height: "100%", overflowY: "auto", boxSizing: "border-box" },
   page: {
-    padding: "24px 32px",
+    padding: "20px 24px",
     boxSizing: "border-box",
-    maxWidth: "1080px",
-    width: "100%",
-    margin: "0 auto",
     display: "flex",
     flexDirection: "column",
     gap: "20px",
   },
   card: {
     border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusLarge,
+    borderRadius: "10px",
     backgroundColor: tokens.colorNeutralBackground1,
     overflow: "hidden",
   },

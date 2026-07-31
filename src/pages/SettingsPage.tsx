@@ -27,25 +27,24 @@ import type { TeamInfo } from "../types";
 
 const useStyles = makeStyles({
   root: {
-    padding: tokens.spacingVerticalL,
+    padding: "20px 24px",
     display: "flex",
     flexDirection: "column",
-    gap: tokens.spacingVerticalL,
+    gap: "20px",
     overflowY: "auto",
     height: "100%",
   },
   body: {
     display: "flex",
     flexDirection: "column",
-    gap: tokens.spacingVerticalL,
-    maxWidth: "600px",
+    gap: "20px",
   },
   section: {
     display: "flex",
     flexDirection: "column",
     gap: tokens.spacingVerticalM,
-    padding: tokens.spacingVerticalL,
-    borderRadius: tokens.borderRadiusLarge,
+    padding: "16px 18px",
+    borderRadius: "10px",
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground1,
   },
