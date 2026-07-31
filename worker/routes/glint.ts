@@ -99,18 +99,14 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
 
   const body = await upstream.text();
 
-  console.log(
-    `[glint-proxy] ${method} ${targetUrl} -> ${upstream.status} ${upstreamCT} body=${body.slice(0, 300)}`,
-  );
-
   if (!upstreamCT.includes("application/json") && upstream.status >= 400) {
+    console.error(
+      `[glint-proxy] ${method} ${targetUrl} -> ${upstream.status} ${upstreamCT}, body preview: ${body.slice(0, 300)}`,
+    );
     return c.json(
       {
         error: `Upstream ${upstream.status}`,
         upstreamStatus: upstream.status,
-        upstreamContentType: upstreamCT || null,
-        upstreamBody: body,
-        target: targetUrl,
       },
       upstream.status as never,
     );

@@ -9,6 +9,7 @@ import {
   renewSessionIfExpiring,
   buildScopes,
   SESSION_MIN_TTL_SECONDS,
+  SESSION_COOKIE,
 } from "../auth";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -25,19 +26,19 @@ auth.get("/api/auth/config", async (c) => {
 });
 
 auth.get("/api/auth/me", async (c) => {
-  const sessionId = getCookie(c, "session");
+  const sessionId = getCookie(c, SESSION_COOKIE);
   if (!sessionId) return c.json({ user: null });
 
   const cached = await c.env.KV.get(`session:${sessionId}`, "json");
   if (!cached) {
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
     return c.json({ user: null });
   }
 
   const session = cached as SessionData;
   if (Date.now() > session.expiresAt) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
     return c.json({ user: null });
   }
 
@@ -47,7 +48,7 @@ auth.get("/api/auth/me", async (c) => {
     session,
   );
   if (renewed) {
-    setCookie(c, "session", sessionId, {
+    setCookie(c, SESSION_COOKIE, sessionId, {
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
@@ -97,10 +98,20 @@ auth.get("/api/auth/me", async (c) => {
 });
 
 auth.post("/api/auth/callback", async (c) => {
-  const { code, codeVerifier } = await c.req.json<{
+  const { code, codeVerifier, state } = await c.req.json<{
     code: string;
     codeVerifier?: string;
+    state?: string;
   }>();
+
+  // Validate OAuth state parameter to prevent login CSRF.
+  if (state) {
+    const stateEntry = await c.env.KV.get(`oauth_state:${state}`, "json");
+    if (!stateEntry) {
+      return c.json({ error: "Invalid or expired OAuth state" }, 400);
+    }
+    await c.env.KV.delete(`oauth_state:${state}`);
+  }
 
   const config = await getAppConfig(c.env.KV, c.env);
   const prism = getPrism(config);
@@ -140,7 +151,7 @@ auth.post("/api/auth/callback", async (c) => {
     expirationTtl: ttl,
   });
 
-  setCookie(c, "session", sessionId, {
+  setCookie(c, SESSION_COOKIE, sessionId, {
     httpOnly: true,
     secure: true,
     sameSite: "Lax",
@@ -160,10 +171,10 @@ auth.post("/api/auth/callback", async (c) => {
 });
 
 auth.post("/api/auth/logout", async (c) => {
-  const sessionId = getCookie(c, "session");
+  const sessionId = getCookie(c, SESSION_COOKIE);
   if (sessionId) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
   }
   return c.json({ ok: true });
 });

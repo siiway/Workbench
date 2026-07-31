@@ -6,6 +6,7 @@ import { getAppConfig } from "./config";
 
 export const SESSION_MIN_TTL_SECONDS = 24 * 60 * 60;
 export const SESSION_RENEW_WINDOW_SECONDS = 30 * 60;
+export const SESSION_COOKIE = "__Host-session";
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 /**
@@ -142,26 +143,26 @@ export const requireAuth = createMiddleware<{
   Bindings: Bindings;
   Variables: Variables;
 }>(async (c, next) => {
-  const sessionId = getCookie(c, "session");
+  const sessionId = getCookie(c, SESSION_COOKIE);
   if (!sessionId) return c.json({ error: "Unauthorized" }, 401);
 
   const cached = await c.env.KV.get(`session:${sessionId}`, "json");
   if (!cached) {
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
     return c.json({ error: "Session expired" }, 401);
   }
 
   const session = cached as SessionData;
   if (Date.now() > session.expiresAt) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
     return c.json({ error: "Session expired" }, 401);
   }
   // Absolute ceiling — even if soft expiry would be extended by activity,
   // the session is hard-killed once created+1week.
   if (sessionAbsolutelyExpired(session)) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, "session");
+    deleteCookie(c, SESSION_COOKIE);
     return c.json({ error: "Session expired" }, 401);
   }
 
@@ -171,7 +172,7 @@ export const requireAuth = createMiddleware<{
     session,
   );
   if (renewed) {
-    setCookie(c, "session", sessionId, {
+    setCookie(c, SESSION_COOKIE, sessionId, {
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
@@ -189,7 +190,11 @@ export const requireAuth = createMiddleware<{
     try {
       finalSession = await refreshAccessToken(c.env.KV, sessionId, finalSession, c.env);
     } catch {
-      // Continue with existing token
+      // If the access token is already past its expiry, refresh failure is fatal.
+      if (finalSession.accessTokenExpiresAt && Date.now() > finalSession.accessTokenExpiresAt) {
+        return c.json({ error: "Token expired, please re-authenticate" }, 401);
+      }
+      console.warn("Token refresh failed, continuing with existing token (still valid)");
     }
   }
 

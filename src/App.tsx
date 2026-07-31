@@ -14,6 +14,7 @@ import {
 } from "@fluentui/react-components";
 import { AuthProvider, useAuth } from "./auth";
 import { I18nProvider, useI18n } from "./i18n";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -288,18 +289,20 @@ export default function App() {
     <FluentProvider theme={theme} style={{ height: "100%" }}>
       <I18nProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/callback" element={<CallbackPage />} />
-            <Route
-              path="/login"
-              element={
-                <div style={{ height: "100%" }}>
-                  <LoginPage />
-                </div>
-              }
-            />
-            <Route path="*" element={<AppShell />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/callback" element={<CallbackPage />} />
+              <Route
+                path="/login"
+                element={
+                  <div style={{ height: "100%" }}>
+                    <LoginPage />
+                  </div>
+                }
+              />
+              <Route path="*" element={<AppShell />} />
+            </Routes>
+          </ErrorBoundary>
         </AuthProvider>
       </I18nProvider>
     </FluentProvider>

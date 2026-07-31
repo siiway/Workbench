@@ -43,6 +43,7 @@ type NbPair = {
 const PAIR_TTL_SECONDS = 10 * 60;
 const PAIR_CODE_BYTES = 6;
 const TOKEN_BYTES = 32;
+const MAX_INSTANCES_PER_TEAM = 20;
 
 const nb = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -212,6 +213,11 @@ nb.post("/api/nextbridge/instances", requireAuth, async (c) => {
   const session = c.get("session");
   if (!canManage(session, teamId)) {
     return c.json({ error: "Only team owners and co-owners can pair instances" }, 403);
+  }
+
+  const existing = await listInstances(c.env.KV, teamId);
+  if (existing.length >= MAX_INSTANCES_PER_TEAM) {
+    return c.json({ error: `Maximum of ${MAX_INSTANCES_PER_TEAM} instances per team reached` }, 400);
   }
 
   const code = genCode();

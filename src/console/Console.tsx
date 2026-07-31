@@ -36,6 +36,11 @@ import {
 } from "./dataCache";
 import { fuzzySort } from "./fuzzy";
 
+const SAFE_LINK_RE = /^https?:\/\//i;
+function isSafeAppHref(url: string): boolean {
+  return typeof url === "string" && SAFE_LINK_RE.test(url);
+}
+
 type Props = {
   teamId: string;
   /** When true, an "X" close button is rendered in the header (drawer mode). */
@@ -313,15 +318,10 @@ export function Console({ teamId, showClose, onClose, visible = true }: Props) {
         };
         return suggestionsFor(parsedCommand, ctx, registry);
       }
-      if (getCachedApps(teamId).length === 0) void refreshApps(teamId);
       return suggestForSigil(sigil.sigil, sigil.query, teamId);
     }
     // No prefix → fuzzy-match apps as a launcher.
     const apps = getCachedApps(teamId);
-    if (apps.length === 0) {
-      void refreshApps(teamId);
-      return [];
-    }
     return fuzzySort(apps, input.trim(), (a) => a.name)
       .slice(0, 12)
       .map(({ item }) => ({
@@ -330,10 +330,17 @@ export function Console({ teamId, showClose, onClose, visible = true }: Props) {
         hint: item.url,
         category: "app",
         runImmediately: () => {
-          window.open(item.url, "_blank", "noopener,noreferrer");
+          if (isSafeAppHref(item.url)) {
+            window.open(item.url, "_blank", "noopener,noreferrer");
+          }
         },
       }));
   }, [input, sigil, parsedCommand, registry, teamId, setInput, cacheVersion]);
+
+  // Fetch app cache on load / team change so the launcher view is never empty.
+  useEffect(() => {
+    void refreshApps(teamId);
+  }, [teamId]);
 
   useEffect(() => {
     setSuggestions(computedSuggestions);
@@ -712,7 +719,9 @@ function suggestForSigil(
       hint: app.url,
       category: "app",
       runImmediately: () => {
-        window.open(app.url, "_blank", "noopener,noreferrer");
+        if (isSafeAppHref(app.url)) {
+          window.open(app.url, "_blank", "noopener,noreferrer");
+        }
       },
     }));
   }
@@ -730,7 +739,9 @@ function suggestForSigil(
       hint: item.app.url,
       category: "app",
       runImmediately: () => {
-        window.open(item.app.url, "_blank", "noopener,noreferrer");
+        if (isSafeAppHref(item.app.url)) {
+          window.open(item.app.url, "_blank", "noopener,noreferrer");
+        }
       },
     });
     if (out.length >= 12) break;

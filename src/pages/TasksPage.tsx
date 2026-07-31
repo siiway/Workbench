@@ -252,6 +252,11 @@ type ApiTodoListResp = {
   error?: string;
 };
 
+type ApiSetsResp = {
+  sets?: TodoSet[];
+  error?: string;
+};
+
 type AssignedGroup = {
   setId: string;
   setName: string | null;
@@ -335,7 +340,7 @@ export function TasksPage({ teamId }: Props) {
     try {
       const res = await fetch(`/api/glint/teams/${teamId}/sets`);
       const text = await res.text();
-      let parsed: { sets?: TodoSet[]; error?: string } = {};
+      let parsed: ApiSetsResp;
       try {
         parsed = text ? JSON.parse(text) : {};
       } catch {
@@ -359,9 +364,10 @@ export function TasksPage({ teamId }: Props) {
     } finally {
       setSetsLoading(false);
     }
-  }, [teamId, activeSetId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId]);
 
-  useEffect(() => { void loadSets(); }, [teamId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadSets(); }, [loadSets]);
 
   const loadTodos = useCallback(async () => {
     if (!activeSetId || isAssignedView) return;
@@ -777,7 +783,7 @@ export function TasksPage({ teamId }: Props) {
   const canDeleteCmt = useCallback(
     (c: Comment) =>
       c.userId === myId ? can("delete_own_comments") : can("delete_any_comment"),
-    [myId, perms], // eslint-disable-line react-hooks/exhaustive-deps
+    [myId, perms, can],
   );
 
   // ── row render ───────────────────────────────────────────────────────────

@@ -32,7 +32,7 @@ type AuthContextType = {
   sessionExpired: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  handleCallback: (code: string, codeVerifier?: string) => Promise<boolean>;
+  handleCallback: (code: string, codeVerifier?: string, state?: string) => Promise<boolean>;
   dismissExpired: () => void;
 };
 
@@ -132,9 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const handleCallback = useCallback(async (code: string, codeVerifier?: string): Promise<boolean> => {
-    const body: { code: string; codeVerifier?: string } = { code };
+  const handleCallback = useCallback(async (code: string, codeVerifier?: string, state?: string): Promise<boolean> => {
+    const body: { code: string; codeVerifier?: string; state?: string } = { code };
     if (codeVerifier) body.codeVerifier = codeVerifier;
+    if (state) body.state = state;
     const res = await fetch("/api/auth/callback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

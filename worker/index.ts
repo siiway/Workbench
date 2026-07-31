@@ -17,9 +17,8 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
-  console.error("Unhandled worker error:", message, stack);
-  return c.json({ error: message, stack }, 500);
+  console.error("Unhandled worker error:", message, err instanceof Error ? err.stack : undefined);
+  return c.json({ error: "Internal server error" }, 500);
 });
 
 // Global body-size cap on every API endpoint. 64 KB covers the realistic

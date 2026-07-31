@@ -10,7 +10,7 @@
  * cloud-metadata endpoints other infra exposes. SSRF mitigation.
  */
 
-const PRIVATE_HOST_RE = /^(?:127\.|10\.|0\.0\.0\.0$|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|::1$|fe80:|fc[0-9a-f]{2}:|fd[0-9a-f]{2}:|localhost$)/i;
+const PRIVATE_HOST_RE = /^(?:127\.|10\.|0\.0\.0\.0$|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|::1$|fe80::|fc00::|fd00::|localhost$)/i;
 
 const ALLOWED_SCHEMES = new Set(["http:", "https:"]);
 

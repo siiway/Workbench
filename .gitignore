@@ -12,12 +12,13 @@ build/
 *.tmp
 *.swp
 # Ignore IDE/editor-specific files
-vscode/
+.vscode/
+.vscode-test/
 idea/
 .idea/
 *.iml
 # Ignore OS-specific files
-DS_Store
+.DS_Store
 Thumbs.db
 # Ignore environment files
 env

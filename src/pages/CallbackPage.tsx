@@ -35,8 +35,10 @@ export function CallbackPage() {
     sessionStorage.removeItem("pkce_verifier");
     sessionStorage.removeItem("pkce_state");
 
-    handleCallback(code, codeVerifier).then((ok) => {
+    handleCallback(code, codeVerifier, savedState).then((ok) => {
       navigate(ok ? "/" : "/login", { replace: true });
+    }).catch(() => {
+      navigate("/login", { replace: true });
     });
   }, [handleCallback, navigate]);
 

@@ -238,7 +238,9 @@ export const commands: Command[] = [
         ctx.println(`No app matches "${args.name}".`, "error");
         return;
       }
-      window.open(found.url, "_blank", "noopener,noreferrer");
+      if (isSafeAppHref(found.url)) {
+        window.open(found.url, "_blank", "noopener,noreferrer");
+      }
       ctx.println(`opened ${found.name}`, "success");
     },
   },

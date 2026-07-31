@@ -656,7 +656,10 @@ export function AppsPage({ teamId }: Props) {
         onDragEnd={onCardDragEnd}
         onClick={(e) => {
           if (e.defaultPrevented) return;
-          window.open(card.url, "_blank", "noopener,noreferrer");
+          const SAFE_LINK = /^https?:\/\//i;
+          if (SAFE_LINK.test(card.url)) {
+            window.open(card.url, "_blank", "noopener,noreferrer");
+          }
         }}
       >
         <div className={styles.cardHead}>
