@@ -36,6 +36,12 @@ a {
   text-decoration: none;
 }
 
+/* Prevent Fluent Badges from wrapping or shrinking in flex containers */
+.fui-Badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Slim custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

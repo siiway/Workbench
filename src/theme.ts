@@ -13,7 +13,7 @@ const LIGHT = {
   colorNeutralBackground3Hover: "#e8e8e8",
   colorNeutralBackground3Pressed: "#e0e0e0",
   colorNeutralBackground3Selected: "#e0e0e0",
-  colorNeutralStroke1: "#000000",
+  colorNeutralStroke1: "#d1d1d1",
   colorNeutralStroke2: "#d0d0d0",
   colorNeutralStroke3: "#e0e0e0",
 };
