@@ -147,10 +147,12 @@ export function DashboardPage({ teamId }: Props) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [glintError, setGlintError] = useState<string | null>(null);
+  const [glintNeedsConfiguration, setGlintNeedsConfiguration] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setGlintError(null);
+    setGlintNeedsConfiguration(false);
     try {
       const [ovRes, mtRes, fdRes] = await Promise.all([
         fetch(`/api/glint/teams/${teamId}/overview`),
@@ -169,6 +171,7 @@ export function DashboardPage({ teamId }: Props) {
       }
       const ov = safeParse<TeamOverview & { error?: string }>(ovText, ovRes.status);
       if (ovRes.status === 503 || !ovRes.ok) {
+        setGlintNeedsConfiguration(ovRes.status === 503);
         setGlintError(ov.error ?? t.glintNotConfigured);
         return;
       }
@@ -214,20 +217,24 @@ export function DashboardPage({ teamId }: Props) {
         <div className={styles.configBanner}>
           <div>
             <Text weight="semibold" block>
-              {t.glintNotConfiguredTitle}
+              {glintNeedsConfiguration
+                ? t.glintNotConfiguredTitle
+                : t.glintUnavailableTitle}
             </Text>
             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
               {glintError}
             </Text>
           </div>
-          <Button
-            appearance="primary"
-            size="small"
-            icon={<SettingsRegular />}
-            onClick={() => navigate("/settings")}
-          >
-            {t.configure}
-          </Button>
+          {glintNeedsConfiguration && (
+            <Button
+              appearance="primary"
+              size="small"
+              icon={<SettingsRegular />}
+              onClick={() => navigate("/settings")}
+            >
+              {t.configure}
+            </Button>
+          )}
         </div>
       )}
 

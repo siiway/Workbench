@@ -73,6 +73,33 @@ type GlobalConfig = {
   session_ttl: number;
 };
 
+function isGlobalConfig(value: unknown): value is GlobalConfig {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Record<string, unknown>;
+  return (
+    typeof config.prism_base_url === "string" &&
+    typeof config.prism_client_id === "string" &&
+    typeof config.prism_client_secret === "string" &&
+    typeof config.prism_redirect_uri === "string" &&
+    typeof config.glint_base_url === "string" &&
+    typeof config.glint_client_id === "string" &&
+    typeof config.use_pkce === "boolean" &&
+    typeof config.session_ttl === "number"
+  );
+}
+
+function responseError(value: unknown, fallback: string): string {
+  if (
+    value &&
+    typeof value === "object" &&
+    "error" in value &&
+    typeof value.error === "string"
+  ) {
+    return value.error;
+  }
+  return fallback;
+}
+
 function GlobalSettings({ canEdit }: { canEdit: boolean }) {
   const styles = useStyles();
   const { t } = useI18n();
@@ -83,11 +110,29 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((d) => setForm(d as GlobalConfig))
-      .catch(() => setError(t.settingsFailedToLoad))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/settings");
+        const data: unknown = await response.json();
+        if (!response.ok) {
+          throw new Error(responseError(data, t.settingsFailedToLoad));
+        }
+        if (!isGlobalConfig(data)) throw new Error(t.settingsFailedToLoad);
+        if (!cancelled) setForm(data);
+      } catch (cause) {
+        if (!cancelled) {
+          setError(
+            cause instanceof Error ? cause.message : t.settingsFailedToLoad,
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [t.settingsFailedToLoad]);
 
   const set = (k: keyof GlobalConfig) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -220,6 +265,15 @@ function GlobalSettings({ canEdit }: { canEdit: boolean }) {
 
 type TeamConfig = { glint_base_url: string };
 
+function isTeamConfig(value: unknown): value is TeamConfig {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "glint_base_url" in value &&
+    typeof value.glint_base_url === "string"
+  );
+}
+
 function TeamSettings({ teams }: { teams: TeamInfo[] }) {
   const styles = useStyles();
   const { t } = useI18n();
@@ -235,10 +289,29 @@ function TeamSettings({ teams }: { teams: TeamInfo[] }) {
 
   useEffect(() => {
     if (!activeTeamId || configs[activeTeamId] !== undefined) return;
-    fetch(`/api/teams/${activeTeamId}/settings`)
-      .then((r) => r.json())
-      .then((d) => setConfigs((prev) => ({ ...prev, [activeTeamId]: d as TeamConfig })))
-      .catch(() => setError(t.settingsFailedToLoad));
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/teams/${activeTeamId}/settings`);
+        const data: unknown = await response.json();
+        if (!response.ok) {
+          throw new Error(responseError(data, t.settingsFailedToLoad));
+        }
+        if (!isTeamConfig(data)) throw new Error(t.settingsFailedToLoad);
+        if (!cancelled) {
+          setConfigs((prev) => ({ ...prev, [activeTeamId]: data }));
+        }
+      } catch (cause) {
+        if (!cancelled) {
+          setError(
+            cause instanceof Error ? cause.message : t.settingsFailedToLoad,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [activeTeamId, configs, t.settingsFailedToLoad]);
 
   async function save(e: React.FormEvent) {

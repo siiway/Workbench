@@ -5,9 +5,12 @@ import { getAppConfig } from "../config";
 import {
   getPrism,
   fetchUserTeams,
+  requireAuth,
+  refreshAccessToken,
   resolveSessionTtl,
   renewSessionIfExpiring,
   buildScopes,
+  AUTH_FAILURE_HEADER,
   generateOAuthState,
   oauthStatesMatch,
   OAUTH_STATE_COOKIE,
@@ -195,6 +198,30 @@ auth.post("/api/auth/logout", async (c) => {
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
   }
   return c.json({ ok: true });
+});
+
+auth.post("/api/auth/refresh", requireAuth, async (c) => {
+  const sessionId = getCookie(c, SESSION_COOKIE);
+  const session = c.get("session");
+  if (!sessionId || !session.refreshToken) {
+    c.header(AUTH_FAILURE_HEADER, "expired");
+    return c.json({ error: "Re-authentication required" }, 401);
+  }
+
+  try {
+    await refreshAccessToken(c.env.KV, sessionId, session, c.env);
+    c.header("Cache-Control", "no-store");
+    return c.json({ ok: true });
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        message: "OAuth access-token refresh failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    c.header(AUTH_FAILURE_HEADER, "expired");
+    return c.json({ error: "Re-authentication required" }, 401);
+  }
 });
 
 export default auth;

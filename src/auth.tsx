@@ -40,6 +40,20 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 let configPromise: Promise<AuthConfig> | null = null;
 let prismPromise: Promise<PrismClient> | null = null;
+let tokenRefreshPromise: Promise<boolean> | null = null;
+
+function refreshSessionToken(fetchImpl: typeof window.fetch): Promise<boolean> {
+  if (!tokenRefreshPromise) {
+    const pending = fetchImpl("/api/auth/refresh", { method: "POST" })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        if (tokenRefreshPromise === pending) tokenRefreshPromise = null;
+      });
+    tokenRefreshPromise = pending;
+  }
+  return tokenRefreshPromise;
+}
 
 function getConfig(): Promise<AuthConfig> {
   if (!configPromise) {
@@ -93,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const orig = window.fetch;
     window.fetch = async (...args) => {
+      const retryInput = args[0] instanceof Request ? args[0].clone() : args[0];
+      const retryInit = args[1];
       const res = await orig(...args);
       if (res.status === 401 && user) {
         const url =
@@ -101,7 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : args[0] instanceof Request
               ? args[0].url
               : "";
-        if (url.includes("/api/") && !url.includes("/api/auth/")) {
+        if (res.headers.get("X-Workbench-Auth") === "expired") {
+          setSessionExpired(true);
+        } else if (url.includes("/api/glint/")) {
+          if (await refreshSessionToken(orig)) {
+            return orig(retryInput, retryInit);
+          }
           setSessionExpired(true);
         }
       }

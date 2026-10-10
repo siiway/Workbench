@@ -9,7 +9,7 @@ export const SESSION_RENEW_WINDOW_SECONDS = 30 * 60;
 export const SESSION_COOKIE = "__Host-session";
 export const OAUTH_STATE_COOKIE = "__Host-oauth-state";
 export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
-const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
+export const AUTH_FAILURE_HEADER = "X-Workbench-Auth";
 
 export function generateOAuthState(): string {
   const bytes = new Uint8Array(32);
@@ -169,11 +169,15 @@ export const requireAuth = createMiddleware<{
   Variables: Variables;
 }>(async (c, next) => {
   const sessionId = getCookie(c, SESSION_COOKIE);
-  if (!sessionId) return c.json({ error: "Unauthorized" }, 401);
+  if (!sessionId) {
+    c.header(AUTH_FAILURE_HEADER, "expired");
+    return c.json({ error: "Unauthorized" }, 401);
+  }
 
   const cached = await c.env.KV.get(`session:${sessionId}`, "json");
   if (!cached) {
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
+    c.header(AUTH_FAILURE_HEADER, "expired");
     return c.json({ error: "Session expired" }, 401);
   }
 
@@ -181,6 +185,7 @@ export const requireAuth = createMiddleware<{
   if (Date.now() > session.expiresAt) {
     await c.env.KV.delete(`session:${sessionId}`);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
+    c.header(AUTH_FAILURE_HEADER, "expired");
     return c.json({ error: "Session expired" }, 401);
   }
   // Absolute ceiling — even if soft expiry would be extended by activity,
@@ -188,6 +193,7 @@ export const requireAuth = createMiddleware<{
   if (sessionAbsolutelyExpired(session)) {
     await c.env.KV.delete(`session:${sessionId}`);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
+    c.header(AUTH_FAILURE_HEADER, "expired");
     return c.json({ error: "Session expired" }, 401);
   }
 
@@ -206,23 +212,6 @@ export const requireAuth = createMiddleware<{
     });
   }
 
-  let finalSession = activeSession;
-  if (
-    finalSession.refreshToken &&
-    finalSession.accessTokenExpiresAt &&
-    Date.now() > finalSession.accessTokenExpiresAt - TOKEN_REFRESH_WINDOW_MS
-  ) {
-    try {
-      finalSession = await refreshAccessToken(c.env.KV, sessionId, finalSession, c.env);
-    } catch {
-      // If the access token is already past its expiry, refresh failure is fatal.
-      if (finalSession.accessTokenExpiresAt && Date.now() > finalSession.accessTokenExpiresAt) {
-        return c.json({ error: "Token expired, please re-authenticate" }, 401);
-      }
-      console.warn("Token refresh failed, continuing with existing token (still valid)");
-    }
-  }
-
-  c.set("session", finalSession);
+  c.set("session", activeSession);
   await next();
 });

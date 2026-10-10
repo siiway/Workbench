@@ -109,6 +109,7 @@ const en = {
   viewAllTasks: "View all tasks",
   glintNotConfigured: "Glint is not configured for this team.",
   glintNotConfiguredTitle: "Glint not configured",
+  glintUnavailableTitle: "Glint temporarily unavailable",
   configure: "Configure",
   overviewSubtitle: "Tasks, assignments, and recent activity across this team.",
   statPendingDesc: "Tasks awaiting action",

@@ -111,6 +111,7 @@ const zh: Translations = {
   viewAllTasks: "查看全部任务",
   glintNotConfigured: "当前团队尚未配置 Glint。",
   glintNotConfiguredTitle: "Glint 未配置",
+  glintUnavailableTitle: "Glint 暂时不可用",
   configure: "去配置",
   overviewSubtitle: "团队的任务、分配与最近动态。",
   statPendingDesc: "等待处理的任务",
