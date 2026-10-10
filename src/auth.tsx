@@ -113,13 +113,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async () => {
     const cfg = await getConfig();
     const prism = await getPrism();
+    const stateResponse = await fetch("/api/auth/state", { method: "POST" });
+    if (!stateResponse.ok) throw new Error("Failed to start OAuth login");
+    const stateData: unknown = await stateResponse.json();
+    if (
+      typeof stateData !== "object" ||
+      stateData === null ||
+      !("state" in stateData) ||
+      typeof stateData.state !== "string" ||
+      stateData.state.length === 0
+    ) {
+      throw new Error("Invalid OAuth state response");
+    }
+    const state = stateData.state;
     if (cfg.usePkce) {
-      const { url, pkce } = await prism.createAuthorizationUrl({});
+      const { url, pkce } = await prism.createAuthorizationUrl({ state });
       sessionStorage.setItem("pkce_verifier", pkce.codeVerifier);
-      sessionStorage.setItem("pkce_state", pkce.state);
+      sessionStorage.setItem("pkce_state", state);
       window.location.href = url;
     } else {
-      const state = PrismClient.generateState();
       const params = new URLSearchParams({
         response_type: "code",
         client_id: cfg.clientId,

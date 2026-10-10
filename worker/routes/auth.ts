@@ -8,6 +8,10 @@ import {
   resolveSessionTtl,
   renewSessionIfExpiring,
   buildScopes,
+  generateOAuthState,
+  oauthStatesMatch,
+  OAUTH_STATE_COOKIE,
+  OAUTH_STATE_TTL_SECONDS,
   SESSION_MIN_TTL_SECONDS,
   SESSION_COOKIE,
 } from "../auth";
@@ -25,20 +29,33 @@ auth.get("/api/auth/config", async (c) => {
   });
 });
 
+auth.post("/api/auth/state", (c) => {
+  const state = generateOAuthState();
+  setCookie(c, OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  });
+  c.header("Cache-Control", "no-store");
+  return c.json({ state });
+});
+
 auth.get("/api/auth/me", async (c) => {
   const sessionId = getCookie(c, SESSION_COOKIE);
   if (!sessionId) return c.json({ user: null });
 
   const cached = await c.env.KV.get(`session:${sessionId}`, "json");
   if (!cached) {
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ user: null });
   }
 
   const session = cached as SessionData;
   if (Date.now() > session.expiresAt) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ user: null });
   }
 
@@ -99,18 +116,19 @@ auth.get("/api/auth/me", async (c) => {
 
 auth.post("/api/auth/callback", async (c) => {
   const { code, codeVerifier, state } = await c.req.json<{
-    code: string;
+    code?: string;
     codeVerifier?: string;
     state?: string;
   }>();
 
-  // Validate OAuth state parameter to prevent login CSRF.
-  if (state) {
-    const stateEntry = await c.env.KV.get(`oauth_state:${state}`, "json");
-    if (!stateEntry) {
-      return c.json({ error: "Invalid or expired OAuth state" }, 400);
-    }
-    await c.env.KV.delete(`oauth_state:${state}`);
+  if (!code || !state) {
+    return c.json({ error: "Invalid OAuth callback payload" }, 400);
+  }
+
+  const expectedState = getCookie(c, OAUTH_STATE_COOKIE);
+  deleteCookie(c, OAUTH_STATE_COOKIE, { path: "/", secure: true });
+  if (!expectedState || !(await oauthStatesMatch(state, expectedState))) {
+    return c.json({ error: "Invalid or expired OAuth state" }, 400);
   }
 
   const config = await getAppConfig(c.env.KV, c.env);
@@ -174,7 +192,7 @@ auth.post("/api/auth/logout", async (c) => {
   const sessionId = getCookie(c, SESSION_COOKIE);
   if (sessionId) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
   }
   return c.json({ ok: true });
 });

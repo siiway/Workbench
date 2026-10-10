@@ -7,7 +7,32 @@ import { getAppConfig } from "./config";
 export const SESSION_MIN_TTL_SECONDS = 24 * 60 * 60;
 export const SESSION_RENEW_WINDOW_SECONDS = 30 * 60;
 export const SESSION_COOKIE = "__Host-session";
+export const OAUTH_STATE_COOKIE = "__Host-oauth-state";
+export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
+
+export function generateOAuthState(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export async function oauthStatesMatch(
+  provided: string,
+  expected: string,
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [providedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
+}
 
 /**
  * Absolute session lifetime ceiling. A session is hard-killed exactly this
@@ -148,21 +173,21 @@ export const requireAuth = createMiddleware<{
 
   const cached = await c.env.KV.get(`session:${sessionId}`, "json");
   if (!cached) {
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ error: "Session expired" }, 401);
   }
 
   const session = cached as SessionData;
   if (Date.now() > session.expiresAt) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ error: "Session expired" }, 401);
   }
   // Absolute ceiling — even if soft expiry would be extended by activity,
   // the session is hard-killed once created+1week.
   if (sessionAbsolutelyExpired(session)) {
     await c.env.KV.delete(`session:${sessionId}`);
-    deleteCookie(c, SESSION_COOKIE);
+    deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ error: "Session expired" }, 401);
   }
 
