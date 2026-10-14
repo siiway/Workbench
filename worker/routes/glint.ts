@@ -99,6 +99,31 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
 
   const body = await upstream.text();
 
+  if (upstream.status === 401 && upstreamCT.includes("application/json")) {
+    try {
+      const payload: unknown = JSON.parse(body);
+      if (
+        payload &&
+        typeof payload === "object" &&
+        "error" in payload &&
+        payload.error === "Token inactive or expired"
+      ) {
+        return c.json(
+          {
+            error: "Cross-app token rejected during Prism introspection",
+            detail: payload.error,
+            source: "glint",
+            stage: "prism_introspection",
+            upstreamStatus: 401,
+          },
+          401,
+        );
+      }
+    } catch {
+      // Fall through and preserve the upstream response unchanged.
+    }
+  }
+
   if (!upstreamCT.includes("application/json") && upstream.status >= 400) {
     console.error(
       `[glint-proxy] ${method} ${targetUrl} -> ${upstream.status} ${upstreamCT}, body preview: ${body.slice(0, 300)}`,

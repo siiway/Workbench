@@ -110,6 +110,9 @@ const en = {
   glintNotConfigured: "Glint is not configured for this team.",
   glintNotConfiguredTitle: "Glint not configured",
   glintUnavailableTitle: "Glint temporarily unavailable",
+  glintAuthChainTitle: "Cross-app authentication chain failed",
+  glintPrismIntrospectionDetail:
+    "The Workbench session is valid, but Glint was rejected while introspecting the cross-app token with Prism (active=false). Chain: Workbench → Glint → Prism.",
   configure: "Configure",
   overviewSubtitle: "Tasks, assignments, and recent activity across this team.",
   statPendingDesc: "Tasks awaiting action",

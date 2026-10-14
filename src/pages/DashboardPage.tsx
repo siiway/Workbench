@@ -137,6 +137,12 @@ const useStyles = makeStyles({
 
 type Props = { teamId: string };
 
+type GlintErrorPayload = {
+  error?: string;
+  detail?: string;
+  stage?: string;
+};
+
 export function DashboardPage({ teamId }: Props) {
   const styles = useStyles();
   const navigate = useNavigate();
@@ -148,11 +154,13 @@ export function DashboardPage({ teamId }: Props) {
   const [loading, setLoading] = useState(true);
   const [glintError, setGlintError] = useState<string | null>(null);
   const [glintNeedsConfiguration, setGlintNeedsConfiguration] = useState(false);
+  const [glintAuthChainFailure, setGlintAuthChainFailure] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setGlintError(null);
     setGlintNeedsConfiguration(false);
+    setGlintAuthChainFailure(false);
     try {
       const [ovRes, mtRes, fdRes] = await Promise.all([
         fetch(`/api/glint/teams/${teamId}/overview`),
@@ -169,10 +177,16 @@ export function DashboardPage({ teamId }: Props) {
           throw new Error(`Unexpected response (${status}): ${text.slice(0, 120)}`);
         }
       }
-      const ov = safeParse<TeamOverview & { error?: string }>(ovText, ovRes.status);
+      const ov = safeParse<TeamOverview & GlintErrorPayload>(ovText, ovRes.status);
       if (ovRes.status === 503 || !ovRes.ok) {
         setGlintNeedsConfiguration(ovRes.status === 503);
-        setGlintError(ov.error ?? t.glintNotConfigured);
+        const introspectionFailed = ov.stage === "prism_introspection";
+        setGlintAuthChainFailure(introspectionFailed);
+        setGlintError(
+          introspectionFailed
+            ? t.glintPrismIntrospectionDetail
+            : (ov.error ?? t.glintNotConfigured),
+        );
         return;
       }
       const mt = safeParse<{ todos: MyTodo[]; error?: string }>(mtText, mtRes.status);
@@ -219,6 +233,8 @@ export function DashboardPage({ teamId }: Props) {
             <Text weight="semibold" block>
               {glintNeedsConfiguration
                 ? t.glintNotConfiguredTitle
+                : glintAuthChainFailure
+                  ? t.glintAuthChainTitle
                 : t.glintUnavailableTitle}
             </Text>
             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>

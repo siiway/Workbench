@@ -112,6 +112,9 @@ const zh: Translations = {
   glintNotConfigured: "当前团队尚未配置 Glint。",
   glintNotConfiguredTitle: "Glint 未配置",
   glintUnavailableTitle: "Glint 暂时不可用",
+  glintAuthChainTitle: "跨应用认证链路失败",
+  glintPrismIntrospectionDetail:
+    "Workbench 会话正常；Glint 在向 Prism 自省跨应用令牌时被拒绝（active=false）。链路：Workbench → Glint → Prism。",
   configure: "去配置",
   overviewSubtitle: "团队的任务、分配与最近动态。",
   statPendingDesc: "等待处理的任务",
