@@ -274,6 +274,8 @@ const zh: Translations = {
   bridgePairAfterRun: "配对完成后可以关闭此弹窗，实例会自动出现在列表中。",
   bridgeCopyCmd: "复制命令",
   bridgeConfigure: "配置",
+  bridgeSwitchInstance: "切换 NextBridge 实例",
+  bridgeSelectInstance: "选择实例",
   bridgeChannels: "互连组",
   bridgeChannelsEmpty: "暂无互连组。请在 NextBridge 的 rules 文件中把此 Workbench 实例加入某条规则，才能在此发送消息。",
   bridgeChannelEmpty: "此组暂无消息。",

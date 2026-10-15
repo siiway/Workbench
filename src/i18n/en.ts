@@ -273,6 +273,8 @@ const en = {
   bridgePairAfterRun: "Once paired, this dialog can be closed. The instance will appear in the list automatically.",
   bridgeCopyCmd: "Copy command",
   bridgeConfigure: "Configure",
+  bridgeSwitchInstance: "Switch NextBridge instance",
+  bridgeSelectInstance: "Select instance",
   bridgeChannels: "Groups",
   bridgeChannelsEmpty: "No groups yet. Add this Workbench instance to a rule in NextBridge's rules file to make it addressable from chat.",
   bridgeChannelEmpty: "No messages in this group yet.",

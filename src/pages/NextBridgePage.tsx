@@ -26,6 +26,11 @@ import {
   DialogTitle,
   Field,
   Input,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   MessageBar,
   MessageBarBody,
   Spinner,
@@ -37,6 +42,7 @@ import {
 } from "@fluentui/react-components";
 import {
   ArrowClockwiseRegular,
+  ChevronDownRegular,
   DocumentRegular,
   EditRegular,
   ImageOffRegular,
@@ -454,6 +460,10 @@ export function NextBridgePage({ teamId }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const instanceIdRef = useRef(instanceId);
+  const activeKeyRef = useRef(activeKey);
+  instanceIdRef.current = instanceId;
+  activeKeyRef.current = activeKey;
 
   // rule_id → user-assigned display label. Loaded alongside channels;
   // edited via the rename dialog. Empty entry = use default rule_id.
@@ -473,7 +483,11 @@ export function NextBridgePage({ teamId }: Props) {
       }
       const data = (await r.json()) as InstanceListResponse;
       setList(data);
-      setInstanceId((prev) => prev ?? data.instances[0]?.id ?? null);
+      setInstanceId((prev) =>
+        prev && data.instances.some((instance) => instance.id === prev)
+          ? prev
+          : (data.instances[0]?.id ?? null),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -483,14 +497,33 @@ export function NextBridgePage({ teamId }: Props) {
     void fetchList();
   }, [fetchList]);
 
+  // Every paired NB has independent channels, history and a DO-backed
+  // WebSocket. Clear instance-scoped state before the selected instance is
+  // loaded so a stale channel or draft cannot be sent through the wrong NB.
+  useEffect(() => {
+    setStatus(null);
+    setChannels(null);
+    setActiveKey(null);
+    setMessages(null);
+    setComposer("");
+    setGroupNames({});
+    setRenameTarget(null);
+    setError(null);
+  }, [instanceId, teamId]);
+
   // Once we have an instance, pull status + channels + custom group names.
   const fetchStatusAndChannels = useCallback(async () => {
     if (!instanceId) return;
+    const requestedInstanceId = instanceId;
     try {
       const statusR = await fetch(
         `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/status?teamId=${encodeURIComponent(teamId)}`,
       );
-      if (statusR.ok) setStatus((await statusR.json()) as StatusResponse);
+      if (statusR.ok) {
+        const nextStatus = (await statusR.json()) as StatusResponse;
+        if (instanceIdRef.current !== requestedInstanceId) return;
+        setStatus(nextStatus);
+      }
 
       const channelsR = await fetch(
         `/api/nextbridge/instances/${encodeURIComponent(instanceId)}/channels?teamId=${encodeURIComponent(teamId)}`,
@@ -499,6 +532,7 @@ export function NextBridgePage({ teamId }: Props) {
         const body = (await channelsR.json()) as
           | { ok: true; data: { channels: BridgeChannel[] } }
           | { ok: false; error: string };
+        if (instanceIdRef.current !== requestedInstanceId) return;
         if (body.ok) {
           setChannels(body.data.channels);
           // First channel becomes active unless user already picked one.
@@ -513,10 +547,13 @@ export function NextBridgePage({ teamId }: Props) {
       );
       if (namesR.ok) {
         const body = (await namesR.json()) as { names?: Record<string, string> };
+        if (instanceIdRef.current !== requestedInstanceId) return;
         setGroupNames(body.names ?? {});
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (instanceIdRef.current === requestedInstanceId) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     }
   }, [instanceId, teamId]);
 
@@ -552,6 +589,8 @@ export function NextBridgePage({ teamId }: Props) {
   // Fetch messages for the active channel; poll every 3 seconds.
   const fetchMessages = useCallback(async () => {
     if (!instanceId || !activeKey) return;
+    const requestedInstanceId = instanceId;
+    const requestedActiveKey = activeKey;
     try {
       const qs = new URLSearchParams({
         teamId,
@@ -563,6 +602,12 @@ export function NextBridgePage({ teamId }: Props) {
       );
       if (!r.ok) return;
       const body = (await r.json()) as { messages: ChatMessage[] };
+      if (
+        instanceIdRef.current !== requestedInstanceId ||
+        activeKeyRef.current !== requestedActiveKey
+      ) {
+        return;
+      }
       setMessages(body.messages);
     } catch {
       // transient — keep last good state
@@ -605,6 +650,12 @@ export function NextBridgePage({ teamId }: Props) {
         }
         if (!frame || frame.kind !== "chat.inbound" || !frame.message) return;
         const incoming = frame.message;
+        if (
+          instanceIdRef.current !== instanceId ||
+          activeKeyRef.current !== activeKey
+        ) {
+          return;
+        }
         // Only append if it matches the channel the user is currently viewing.
         if (incoming.channel_key !== activeKey) return;
         setMessages((prev) => {
@@ -686,6 +737,8 @@ export function NextBridgePage({ teamId }: Props) {
   const canManage = list?.can_manage ?? false;
   const connected = status?.connected ?? false;
   const instances = list?.instances ?? [];
+  const activeInstance =
+    instances.find((instance) => instance.id === instanceId) ?? null;
 
   return (
     <div className={styles.root}>
@@ -700,6 +753,36 @@ export function NextBridgePage({ teamId }: Props) {
           }
           actions={
             <>
+              {instances.length > 1 && (
+                <Menu>
+                  <MenuTrigger disableButtonEnhancement>
+                    <Button
+                      appearance="subtle"
+                      icon={<ChevronDownRegular />}
+                      iconPosition="after"
+                      disabled={sending}
+                      aria-label={t.bridgeSwitchInstance}
+                      title={t.bridgeSwitchInstance}
+                    >
+                      {activeInstance?.name ?? t.bridgeSelectInstance}
+                    </Button>
+                  </MenuTrigger>
+                  <MenuPopover>
+                    <MenuList>
+                      {instances.map((instance) => (
+                        <MenuItem
+                          key={instance.id}
+                          disabled={instance.id === instanceId}
+                          secondaryContent={instance.id.slice(0, 8)}
+                          onClick={() => setInstanceId(instance.id)}
+                        >
+                          {instance.name}
+                        </MenuItem>
+                      ))}
+                    </MenuList>
+                  </MenuPopover>
+                </Menu>
+              )}
               <Button
                 appearance="subtle"
                 icon={<ArrowClockwiseRegular />}
