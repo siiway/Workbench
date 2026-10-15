@@ -65,6 +65,39 @@ type ChatMessage = {
 const EVENT_BUFFER_SIZE = 200;
 const CHAT_BUFFER_SIZE = 1000;
 const RPC_TIMEOUT_MS = 15_000;
+const MAX_PENDING_RPCS = 100;
+const MAX_WS_FRAME_BYTES = 256 * 1024;
+const MAX_STORED_BUFFER_BYTES = 1_500_000;
+const MAX_GROUP_NAMES = 100;
+const MAX_GROUP_KEY_LENGTH = 128;
+const MAX_GROUP_NAME_LENGTH = 128;
+const MAX_CHAT_TEXT_LENGTH = 4096;
+const MAX_CHANNEL_BYTES = 4096;
+const MAX_ATTACHMENTS = 8;
+
+const encoder = new TextEncoder();
+
+function byteLength(value: string): number {
+  return encoder.encode(value).byteLength;
+}
+
+function truncate(value: unknown, maxLength: number): string {
+  return String(value ?? "").slice(0, maxLength);
+}
+
+function trimSerializedEntries<T>(items: T[], maxItems: number): T[] {
+  let total = 2; // JSON array brackets
+  let start = items.length;
+  let count = 0;
+  for (let i = items.length - 1; i >= 0 && count < maxItems; i -= 1) {
+    const size = byteLength(JSON.stringify(items[i])) + (count > 0 ? 1 : 0);
+    if (size + total > MAX_STORED_BUFFER_BYTES) break;
+    total += size;
+    start = i;
+    count += 1;
+  }
+  return items.slice(start);
+}
 
 function channelKey(channel: unknown): string {
   if (!channel || typeof channel !== "object") return "";
@@ -72,19 +105,49 @@ function channelKey(channel: unknown): string {
   const sorted = Object.keys(obj).sort();
   const out: Record<string, unknown> = {};
   for (const k of sorted) out[k] = obj[k];
-  return JSON.stringify(out);
+  const key = JSON.stringify(out);
+  return byteLength(key) <= MAX_CHANNEL_BYTES ? key : "";
+}
+
+function normalizeChannel(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  try {
+    return byteLength(JSON.stringify(raw)) <= MAX_CHANNEL_BYTES
+      ? (raw as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function safeMediaUrl(raw: unknown): string {
+  const value = truncate(raw, 2048);
+  if (!value) return "";
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      !parsed.username &&
+      !parsed.password
+    ) {
+      return parsed.href;
+    }
+  } catch {
+    // Drop malformed / non-network attachment URLs.
+  }
+  return "";
 }
 
 function normalizeAttachments(raw: unknown): ChatAttachment[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatAttachment[] = [];
-  for (const item of raw) {
+  for (const item of raw.slice(0, MAX_ATTACHMENTS)) {
     if (!item || typeof item !== "object") continue;
     const a = item as Record<string, unknown>;
     out.push({
-      type: String(a.type ?? ""),
-      url: String(a.url ?? ""),
-      name: String(a.name ?? ""),
+      type: truncate(a.type, 32),
+      url: safeMediaUrl(a.url),
+      name: truncate(a.name, 256),
       size: typeof a.size === "number" ? a.size : Number(a.size ?? -1) || -1,
     });
   }
@@ -126,10 +189,10 @@ export class NbHub {
     // Restore events + chat buffers + group names from storage on cold start.
     this.state.blockConcurrencyWhile(async () => {
       const stored = (await this.state.storage.get<EventEntry[]>("events")) ?? [];
-      this.events = stored;
+      this.events = trimSerializedEntries(stored, EVENT_BUFFER_SIZE);
       const chat =
         (await this.state.storage.get<ChatMessage[]>("chat_messages")) ?? [];
-      this.chatMessages = chat;
+      this.chatMessages = trimSerializedEntries(chat, CHAT_BUFFER_SIZE);
       this.groupNames =
         (await this.state.storage.get<Record<string, string>>("group_names")) ??
         {};
@@ -168,9 +231,15 @@ export class NbHub {
       case "status":
         return Response.json(this.status());
       case "events":
+        {
+          const requested = Number.parseInt(url.searchParams.get("limit") ?? "100", 10);
+          const limit = Number.isFinite(requested)
+            ? Math.max(1, Math.min(requested, EVENT_BUFFER_SIZE))
+            : 100;
         return Response.json({
-          events: this.events.slice(-Number(url.searchParams.get("limit") ?? 100)),
+          events: this.events.slice(-limit),
         });
+        }
       case "messages":
         return Response.json(this.listMessages(url));
       case "group-names":
@@ -192,7 +261,14 @@ export class NbHub {
     } catch {
       return Response.json({ ok: false, error: "invalid JSON" }, { status: 400 });
     }
-    if (!body.names || typeof body.names !== "object") {
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
+      !body.names ||
+      typeof body.names !== "object" ||
+      Array.isArray(body.names)
+    ) {
       return Response.json(
         { ok: false, error: "`names` must be an object" },
         { status: 400 },
@@ -202,9 +278,10 @@ export class NbHub {
     const next: Record<string, string> = {};
     for (const [k, v] of Object.entries(body.names as Record<string, unknown>)) {
       const key = String(k).trim();
-      if (!key) continue;
+      if (!key || key.length > MAX_GROUP_KEY_LENGTH) continue;
       const val = typeof v === "string" ? v.trim() : "";
-      if (val) next[key] = val;
+      if (val) next[key] = val.slice(0, MAX_GROUP_NAME_LENGTH);
+      if (Object.keys(next).length >= MAX_GROUP_NAMES) break;
     }
     this.groupNames = next;
     await this.state.storage.put("group_names", next);
@@ -222,10 +299,13 @@ export class NbHub {
   }
 
   private listMessages(url: URL): { messages: ChatMessage[] } {
-    const limit = Math.max(
-      1,
-      Math.min(Number(url.searchParams.get("limit") ?? CHAT_BUFFER_SIZE), CHAT_BUFFER_SIZE),
+    const requested = Number.parseInt(
+      url.searchParams.get("limit") ?? String(CHAT_BUFFER_SIZE),
+      10,
     );
+    const limit = Number.isFinite(requested)
+      ? Math.max(1, Math.min(requested, CHAT_BUFFER_SIZE))
+      : CHAT_BUFFER_SIZE;
     const channel = url.searchParams.get("channel"); // canonical key string
     let pool = this.chatMessages;
     if (channel) pool = pool.filter((m) => m.channel_key === channel);
@@ -284,11 +364,23 @@ export class NbHub {
     } catch {
       return Response.json({ ok: false, error: "invalid JSON" }, { status: 400 });
     }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return Response.json(
+        { ok: false, error: "RPC payload must be an object" },
+        { status: 400 },
+      );
+    }
     const method = body.method;
-    if (!method || typeof method !== "string") {
+    if (!method || typeof method !== "string" || method.length > 128) {
       return Response.json(
         { ok: false, error: "method is required" },
         { status: 400 },
+      );
+    }
+    if (this.pending.size >= MAX_PENDING_RPCS) {
+      return Response.json(
+        { ok: false, error: "Too many pending RPCs" },
+        { status: 429 },
       );
     }
 
@@ -341,6 +433,16 @@ export class NbHub {
     const meta = _ws.deserializeAttachment() as { role?: string } | null;
     if (meta?.role === "frontend") return;
 
+    const rawSize = typeof raw === "string" ? byteLength(raw) : raw.byteLength;
+    if (rawSize > MAX_WS_FRAME_BYTES) {
+      try {
+        _ws.close(1009, "message too large");
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
     let text: string;
     if (typeof raw === "string") {
       text = raw;
@@ -391,9 +493,9 @@ export class NbHub {
 
         this.meta = {
           instance_id: claimed,
-          instance_name: frame.instance_name,
-          version: frame.version,
-          command_prefix: frame.command_prefix,
+          instance_name: truncate(frame.instance_name, 128),
+          version: truncate(frame.version, 64),
+          command_prefix: truncate(frame.command_prefix, 64),
           connected_at: Date.now(),
         };
         await this.state.storage.put("meta", this.meta);
@@ -420,15 +522,17 @@ export class NbHub {
         return;
       }
       case "event": {
+        if (typeof frame.topic !== "string" || frame.topic.length > 128) return;
         const entry: EventEntry = {
           topic: frame.topic,
           data: frame.data,
-          t: frame.t ?? Math.floor(Date.now() / 1000),
+          t:
+            typeof frame.t === "number" && Number.isFinite(frame.t)
+              ? frame.t
+              : Math.floor(Date.now() / 1000),
         };
         this.events.push(entry);
-        if (this.events.length > EVENT_BUFFER_SIZE) {
-          this.events.splice(0, this.events.length - EVENT_BUFFER_SIZE);
-        }
+        this.events = trimSerializedEntries(this.events, EVENT_BUFFER_SIZE);
         await this.state.storage.put("events", this.events);
 
         // Persist chat messages separately so the /bridge page can render a
@@ -436,12 +540,10 @@ export class NbHub {
         if (frame.topic === "chat.inbound" && this.isChatPayload(frame.data)) {
           const msg = this.toChatMessage(frame.data, entry.t);
           this.chatMessages.push(msg);
-          if (this.chatMessages.length > CHAT_BUFFER_SIZE) {
-            this.chatMessages.splice(
-              0,
-              this.chatMessages.length - CHAT_BUFFER_SIZE,
-            );
-          }
+          this.chatMessages = trimSerializedEntries(
+            this.chatMessages,
+            CHAT_BUFFER_SIZE,
+          );
           await this.state.storage.put("chat_messages", this.chatMessages);
 
           // Fan out to every currently-attached frontend subscriber. Replaces
@@ -483,17 +585,17 @@ export class NbHub {
   }
 
   private toChatMessage(data: Record<string, unknown>, t: number): ChatMessage {
-    const ch = (data.channel ?? {}) as Record<string, unknown>;
+    const ch = normalizeChannel(data.channel);
     return {
       channel_key: channelKey(ch),
       channel: ch,
-      text: String(data.text ?? ""),
-      user: String(data.user ?? ""),
-      user_id: String(data.user_id ?? ""),
-      user_avatar: String(data.user_avatar ?? ""),
-      platform: String(data.platform ?? ""),
-      instance_id: String(data.instance_id ?? ""),
-      message_id: String(data.message_id ?? ""),
+      text: truncate(data.text, MAX_CHAT_TEXT_LENGTH),
+      user: truncate(data.user, 256),
+      user_id: truncate(data.user_id, 256),
+      user_avatar: safeMediaUrl(data.user_avatar),
+      platform: truncate(data.platform, 64),
+      instance_id: truncate(data.instance_id, 128),
+      message_id: truncate(data.message_id, 256),
       time: (data.time as string | number | null | undefined) ?? null,
       self: Boolean(data.self),
       attachments: normalizeAttachments(data.attachments),

@@ -3,6 +3,7 @@ import type { Bindings, Variables } from "../types";
 import { requireAuth } from "../auth";
 import { getAppConfig, setAppConfig } from "../config";
 import { checkOutboundUrl } from "../urlSafety";
+import { SESSION_MAX_TTL_SECONDS, SESSION_MIN_TTL_SECONDS } from "../auth";
 
 const settings = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -67,7 +68,7 @@ settings.put("/api/settings", requireAuth, async (c) => {
     return c.json({ error: "Only team owners and co-owners can change settings" }, 403);
   }
 
-  const body = await c.req.json<{
+  let body: {
     prism_base_url?: string;
     prism_client_id?: string;
     prism_client_secret?: string;
@@ -75,7 +76,43 @@ settings.put("/api/settings", requireAuth, async (c) => {
     glint_base_url?: string;
     glint_client_id?: string;
     session_ttl?: number;
-  }>();
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "Invalid settings payload" }, 400);
+  }
+
+  for (const [name, value, maxLength] of [
+    ["prism_base_url", body.prism_base_url, 2048],
+    ["prism_client_id", body.prism_client_id, 256],
+    ["prism_client_secret", body.prism_client_secret, 4096],
+    ["prism_redirect_uri", body.prism_redirect_uri, 2048],
+    ["glint_base_url", body.glint_base_url, 2048],
+    ["glint_client_id", body.glint_client_id, 256],
+  ] as const) {
+    if (value !== undefined && (typeof value !== "string" || value.length > maxLength)) {
+      return c.json({ error: `${name} must be a string of at most ${maxLength} characters` }, 400);
+    }
+  }
+  if (
+    body.session_ttl !== undefined &&
+    (!Number.isInteger(body.session_ttl) ||
+      body.session_ttl < 0 ||
+      (body.session_ttl > 0 && body.session_ttl < SESSION_MIN_TTL_SECONDS) ||
+      body.session_ttl > SESSION_MAX_TTL_SECONDS)
+  ) {
+    return c.json(
+      {
+        error:
+          `session_ttl must be 0 or an integer between ${SESSION_MIN_TTL_SECONDS} and ${SESSION_MAX_TTL_SECONDS}`,
+      },
+      400,
+    );
+  }
 
   // SSRF / scheme validation for every URL field the caller touches.
   for (const [name, val] of [

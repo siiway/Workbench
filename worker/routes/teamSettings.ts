@@ -30,6 +30,14 @@ teamSettings.put("/api/teams/:teamId/settings", requireAuth, async (c) => {
   }
 
   const body = await c.req.json<{ glint_base_url?: string }>();
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    (body.glint_base_url !== undefined && typeof body.glint_base_url !== "string")
+  ) {
+    return c.json({ error: "Invalid team settings payload" }, 400);
+  }
   const patch: { glint_base_url?: string } = {};
   if (body.glint_base_url !== undefined) {
     const trimmed = body.glint_base_url.trim();

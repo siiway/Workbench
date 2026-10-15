@@ -7,35 +7,41 @@
   "scripts": {
     "dev": "vite",
     "build": "wrangler types && tsc -b && vite build",
+    "test": "bun test",
     "lint": "eslint .",
     "preview": "bun run build && vite preview",
     "deploy": "bun run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.73.7",
-    "@fluentui/react-icons": "^2.0.324",
+    "@fluentui/react-components": "^9.74.9",
+    "@fluentui/react-icons": "^2.0.344",
     "@siiway/prism": "0.1.5-fix-1",
-    "hono": "^4.12.12",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-router-dom": "^7.14.1",
-    "zustand": "^5.0.14"
+    "hono": "^4.13.13",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.32.2",
-    "@eslint/js": "^9.39.4",
-    "@types/node": "^25.6.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@cloudflare/vite-plugin": "^1.64.0",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^25.9.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.8",
-    "wrangler": "^4.82.2"
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "wrangler": "^4.151.0"
+  },
+  "overrides": {
+    "baseline-browser-mapping": "2.11.28",
+    "brace-expansion": "5.0.12",
+    "browserslist": "4.29.3"
   }
 }

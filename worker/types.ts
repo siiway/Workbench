@@ -71,17 +71,13 @@ export type SessionData = {
   accessToken: string;
   accessTokenExpiresAt?: number;
   refreshToken?: string;
-  /** Soft expiry — extended by activity via renewSessionIfExpiring. */
+  /** Absolute Workbench session expiry in epoch ms; 0 means no server expiry. */
   expiresAt: number;
-  /**
-   * Wall-clock at first login. Hard ceiling on session lifetime:
-   * `requireAuth` rejects sessions older than ABSOLUTE_SESSION_LIFETIME_MS
-   * regardless of activity, forcing a fresh Prism login. Optional for
-   * forward compatibility with cookies issued before this field was added
-   * — those are treated as "created at session.expiresAt - 1 day".
-   */
+  /** Wall-clock at first login, retained for audit/forward compatibility. */
   createdAt?: number;
   teams: TeamInfo[];
+  /** Last Prism team-membership refresh attempt; bounds stale authorization. */
+  teamsCheckedAt?: number;
 };
 
 export type Variables = {

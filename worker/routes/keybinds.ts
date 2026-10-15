@@ -32,6 +32,9 @@ const KEYBIND_VALUE_MAX_LEN = 64;
 keybinds.put("/api/user/keybinds", requireAuth, async (c) => {
   const session = c.get("session");
   const body = await c.req.json<{ bindings?: Record<string, string> }>();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "Invalid keybind payload" }, 400);
+  }
   const bindings: Record<string, string> = {};
   if (body.bindings && typeof body.bindings === "object") {
     let n = 0;

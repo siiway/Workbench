@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { requireAuth } from "../auth";
 import { resolveGlintUrl } from "../config";
+import { checkOutboundUrl } from "../urlSafety";
 
 const glintProxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -22,7 +23,17 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   const glintPath = c.req.path.replace(/^\/api\/glint/, "/api/cross-app");
 
   const teamIdMatch = glintPath.match(/\/teams\/([^/]+)/);
-  const teamId = teamIdMatch?.[1] ?? "";
+  let teamId = teamIdMatch?.[1] ?? "";
+  if (teamId) {
+    try {
+      teamId = decodeURIComponent(teamId);
+    } catch {
+      return c.json({ error: "Invalid team id" }, 400);
+    }
+    if (!session.teams.some((team) => team.id === teamId)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
 
   const glintBaseUrl = await resolveGlintUrl(c.env.KV, teamId, c.env);
 
@@ -32,16 +43,22 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
       : "No Glint URL configured.";
     return c.json({ error: msg }, 503);
   }
+  const checkedBase = checkOutboundUrl(glintBaseUrl);
+  if (!checkedBase.ok) {
+    console.error(`[glint-proxy] rejected unsafe configured base URL: ${checkedBase.reason}`);
+    return c.json({ error: "Glint URL is invalid or unsafe" }, 503);
+  }
 
   // Team ID flows through unchanged: Workbench and Glint both speak Prism's
   // team_id natively, so no translation is required.
   const reqUrl = new URL(c.req.url);
-  const targetUrl = `${glintBaseUrl}${glintPath}${reqUrl.search}`;
+  const targetUrl = `${glintBaseUrl.replace(/\/+$/, "")}${glintPath}${reqUrl.search}`;
 
   const isUpgrade =
     c.req.header("Upgrade")?.toLowerCase() === "websocket";
 
-  // Build upstream headers — preserve client headers but inject our Bearer token.
+  // Build upstream headers — preserve end-to-end request metadata but never
+  // let callers spoof proxy/network identity or leak Workbench cookies.
   const headers = new Headers();
   const incoming = c.req.raw.headers;
   incoming.forEach((value, key) => {
@@ -50,7 +67,16 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
       lk === "host" ||
       lk === "authorization" ||
       lk === "cookie" ||
-      lk === "content-length"
+      lk === "content-length" ||
+      lk === "connection" ||
+      lk === "proxy-authorization" ||
+      lk === "proxy-authenticate" ||
+      lk === "te" ||
+      lk === "trailer" ||
+      lk === "transfer-encoding" ||
+      lk.startsWith("cf-") ||
+      lk === "forwarded" ||
+      lk.startsWith("x-forwarded-")
     ) {
       return;
     }
@@ -66,7 +92,7 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     headers.set("Content-Type", "application/json");
   }
 
-  const init: RequestInit = { method, headers };
+  const init: RequestInit = { method, headers, signal: c.req.raw.signal };
   if (isUpgrade) {
     // For WS upgrades, forward the raw request body / signal so the upgrade
     // headers are preserved end-to-end.
@@ -90,16 +116,12 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
   const upstreamCT = upstream.headers.get("Content-Type") ?? "";
 
   // 101 (WS upgrade) and SSE streams must be returned without buffering.
-  if (
-    upstream.status === 101 ||
-    upstreamCT.includes("text/event-stream")
-  ) {
+  if (upstream.status === 101) {
     return upstream;
   }
 
-  const body = await upstream.text();
-
   if (upstream.status === 401 && upstreamCT.includes("application/json")) {
+    const body = await upstream.text();
     try {
       const payload: unknown = JSON.parse(body);
       if (
@@ -122,12 +144,17 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     } catch {
       // Fall through and preserve the upstream response unchanged.
     }
+    return new Response(body, {
+      status: upstream.status,
+      headers: { "Content-Type": upstreamCT },
+    });
   }
 
   if (!upstreamCT.includes("application/json") && upstream.status >= 400) {
     console.error(
-      `[glint-proxy] ${method} ${targetUrl} -> ${upstream.status} ${upstreamCT}, body preview: ${body.slice(0, 300)}`,
+      `[glint-proxy] ${method} ${glintPath} -> ${upstream.status} ${upstreamCT || "unknown"}`,
     );
+    await upstream.body?.cancel();
     return c.json(
       {
         error: `Upstream ${upstream.status}`,
@@ -137,11 +164,25 @@ glintProxy.all("/api/glint/*", requireAuth, async (c) => {
     );
   }
 
-  return new Response(body, {
+  const responseHeaders = new Headers();
+  for (const name of [
+    "Content-Type",
+    "Cache-Control",
+    "Content-Disposition",
+    "ETag",
+    "Last-Modified",
+    "Retry-After",
+    "X-Request-Id",
+  ]) {
+    const value = upstream.headers.get(name);
+    if (value) responseHeaders.set(name, value);
+  }
+  if (!responseHeaders.has("Content-Type")) {
+    responseHeaders.set("Content-Type", "application/json");
+  }
+  return new Response(upstream.body, {
     status: upstream.status,
-    headers: {
-      "Content-Type": upstreamCT || "application/json",
-    },
+    headers: responseHeaders,
   });
 });
 

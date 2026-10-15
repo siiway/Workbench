@@ -8,21 +8,28 @@ import {
   requireAuth,
   refreshAccessToken,
   resolveSessionTtl,
-  renewSessionIfExpiring,
   buildScopes,
   AUTH_FAILURE_HEADER,
   generateOAuthState,
   oauthStatesMatch,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
-  SESSION_MIN_TTL_SECONDS,
   SESSION_COOKIE,
+  sessionCookieMaxAge,
+  sessionExpired,
+  refreshSessionTeams,
+  writeSession,
 } from "../auth";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 auth.get("/api/auth/config", async (c) => {
   const config = await getAppConfig(c.env.KV, c.env);
+  try {
+    getPrism(config);
+  } catch {
+    return c.json({ error: "OAuth is not configured safely" }, 503);
+  }
   return c.json({
     baseUrl: config.prism_base_url,
     clientId: config.prism_client_id,
@@ -56,55 +63,29 @@ auth.get("/api/auth/me", async (c) => {
   }
 
   const session = cached as SessionData;
-  if (Date.now() > session.expiresAt) {
+  if (sessionExpired(session)) {
     await c.env.KV.delete(`session:${sessionId}`);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     return c.json({ user: null });
   }
 
-  const { session: activeSession, renewed } = await renewSessionIfExpiring(
-    c.env.KV,
-    sessionId,
-    session,
-  );
-  if (renewed) {
+  if (session.expiresAt === 0) {
     setCookie(c, SESSION_COOKIE, sessionId, {
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
       path: "/",
-      maxAge: SESSION_MIN_TTL_SECONDS,
+      maxAge: sessionCookieMaxAge(session),
     });
   }
 
-  // Refresh teams (and therefore roles) from Prism on every /me call so the
-  // sidebar reflects the current authoritative state, not whatever was cached
-  // when the session was first minted. Falls back to the cached session.teams
-  // if Prism is unreachable so transient outages don't log the user out.
-  let teams = activeSession.teams;
-  try {
-    const config = await getAppConfig(c.env.KV, c.env);
-    const prism = getPrism(config);
-    const fresh = await fetchUserTeams(prism, activeSession.accessToken);
-    if (fresh.length > 0) {
-      teams = fresh;
-      const teamsChanged =
-        JSON.stringify(fresh) !== JSON.stringify(activeSession.teams);
-      if (teamsChanged) {
-        const ttl = Math.max(
-          Math.ceil((activeSession.expiresAt - Date.now()) / 1000),
-          SESSION_MIN_TTL_SECONDS,
-        );
-        await c.env.KV.put(
-          `session:${sessionId}`,
-          JSON.stringify({ ...activeSession, teams: fresh }),
-          { expirationTtl: ttl },
-        );
-      }
-    }
-  } catch {
-    // Prism is down — keep showing cached roles rather than hiding teams.
-  }
+  const activeSession = await refreshSessionTeams(
+    c.env.KV,
+    sessionId,
+    session,
+    c.env,
+    true,
+  );
 
   return c.json({
     user: {
@@ -112,17 +93,33 @@ auth.get("/api/auth/me", async (c) => {
       username: activeSession.username,
       displayName: activeSession.displayName,
       avatarUrl: activeSession.avatarUrl,
-      teams,
+      teams: activeSession.teams,
     },
   });
 });
 
 auth.post("/api/auth/callback", async (c) => {
-  const { code, codeVerifier, state } = await c.req.json<{
+  let body: {
     code?: string;
     codeVerifier?: string;
     state?: string;
-  }>();
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid OAuth callback payload" }, 400);
+  }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    (body.code !== undefined && typeof body.code !== "string") ||
+    (body.codeVerifier !== undefined && typeof body.codeVerifier !== "string") ||
+    (body.state !== undefined && typeof body.state !== "string")
+  ) {
+    return c.json({ error: "Invalid OAuth callback payload" }, 400);
+  }
+  const { code, codeVerifier, state } = body;
 
   if (!code || !state) {
     return c.json({ error: "Invalid OAuth callback payload" }, 400);
@@ -145,8 +142,22 @@ auth.post("/api/auth/callback", async (c) => {
     return c.json({ error: "Token exchange failed" }, 401);
   }
 
-  const userInfo = await prism.getUserInfo(tokens.access_token);
-  const teams = await fetchUserTeams(prism, tokens.access_token);
+  let userInfo;
+  let teams;
+  try {
+    [userInfo, teams] = await Promise.all([
+      prism.getUserInfo(tokens.access_token),
+      fetchUserTeams(prism, tokens.access_token),
+    ]);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        message: "OAuth profile bootstrap failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return c.json({ error: "Unable to load OAuth profile" }, 502);
+  }
 
   const ttl = resolveSessionTtl(config.session_ttl, tokens.expires_in);
   const sessionId = crypto.randomUUID();
@@ -162,22 +173,20 @@ auth.post("/api/auth/callback", async (c) => {
       ? now + tokens.expires_in * 1000
       : undefined,
     refreshToken: tokens.refresh_token,
-    expiresAt: now + ttl * 1000,
-    // Hard ceiling anchor; see ABSOLUTE_SESSION_LIFETIME_MS in worker/auth.ts.
+    expiresAt: ttl === 0 ? 0 : now + ttl * 1000,
     createdAt: now,
     teams,
+    teamsCheckedAt: now,
   };
 
-  await c.env.KV.put(`session:${sessionId}`, JSON.stringify(session), {
-    expirationTtl: ttl,
-  });
+  await writeSession(c.env.KV, sessionId, session);
 
   setCookie(c, SESSION_COOKIE, sessionId, {
     httpOnly: true,
     secure: true,
     sameSite: "Lax",
     path: "/",
-    maxAge: ttl,
+    maxAge: sessionCookieMaxAge(session),
   });
 
   return c.json({

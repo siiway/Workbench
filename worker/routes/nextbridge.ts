@@ -44,6 +44,9 @@ const PAIR_TTL_SECONDS = 10 * 60;
 const PAIR_CODE_BYTES = 6;
 const TOKEN_BYTES = 32;
 const MAX_INSTANCES_PER_TEAM = 20;
+const MAX_INSTANCE_NAME_LENGTH = 128;
+const MAX_CHAT_TEXT_LENGTH = 4096;
+const MAX_CHANNEL_JSON_LENGTH = 4096;
 
 const nb = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -149,9 +152,27 @@ nb.post("/api/nextbridge/pair", async (c) => {
   } catch {
     return c.json({ error: "invalid JSON" }, 400);
   }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    (body.code !== undefined && typeof body.code !== "string") ||
+    (body.instance_name !== undefined && typeof body.instance_name !== "string")
+  ) {
+    return c.json({ error: "invalid pairing payload" }, 400);
+  }
 
   const code = (body.code ?? "").trim();
-  if (!code) return c.json({ error: "code is required" }, 400);
+  if (!/^[0-9a-f]{12}$/i.test(code)) {
+    return c.json({ error: "code must be 12 hexadecimal characters" }, 400);
+  }
+  const instanceName = (body.instance_name ?? "").trim() || "NextBridge";
+  if (instanceName.length > MAX_INSTANCE_NAME_LENGTH) {
+    return c.json(
+      { error: `instance_name must be at most ${MAX_INSTANCE_NAME_LENGTH} characters` },
+      400,
+    );
+  }
 
   const pair = await c.env.KV.get<NbPair>(pairKey(code), "json");
   if (!pair) return c.json({ error: "invalid or expired code" }, 404);
@@ -169,7 +190,7 @@ nb.post("/api/nextbridge/pair", async (c) => {
   const inst: NbInstance = {
     id,
     teamId: pair.teamId,
-    name: (body.instance_name ?? "").trim() || "NextBridge",
+    name: instanceName,
     tokenHash,
     createdAt: new Date().toISOString(),
     createdBy: pair.createdBy,
@@ -206,6 +227,15 @@ nb.post("/api/nextbridge/instances", requireAuth, async (c) => {
     body = (await c.req.json()) as typeof body;
   } catch {
     return c.json({ error: "invalid JSON" }, 400);
+  }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    (body.teamId !== undefined && typeof body.teamId !== "string") ||
+    (body.name !== undefined && typeof body.name !== "string")
+  ) {
+    return c.json({ error: "invalid instance payload" }, 400);
   }
   const teamId = body.teamId?.trim();
   if (!teamId) return c.json({ error: "teamId is required" }, 400);
@@ -258,13 +288,16 @@ nb.delete("/api/nextbridge/instances/:id", requireAuth, async (c) => {
 
 async function requireInstanceAccess(
   c: import("hono").Context<{ Bindings: Bindings; Variables: Variables }>,
+  manage = false,
 ): Promise<{ teamId: string; id: string } | Response> {
   const id = c.req.param("id");
   if (!id) return c.json({ error: "id is required" }, 400);
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "teamId is required" }, 400);
   const session = c.get("session");
-  if (!isMember(session, teamId)) return c.json({ error: "Forbidden" }, 403);
+  if (manage ? !canManage(session, teamId) : !isMember(session, teamId)) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
   const inst = await c.env.KV.get(instanceKey(teamId, id), "json");
   if (!inst) return c.json({ error: "not found" }, 404);
   return { teamId, id };
@@ -296,7 +329,10 @@ nb.get("/api/nextbridge/instances/:id/events", requireAuth, async (c) => {
 });
 
 nb.post("/api/nextbridge/instances/:id/rpc", requireAuth, async (c) => {
-  const access = await requireInstanceAccess(c);
+  // This is the unrestricted control-plane RPC surface (drivers, rules,
+  // reloads and any future methods). Chat for ordinary members goes through
+  // the dedicated, allowlisted endpoints below.
+  const access = await requireInstanceAccess(c, true);
   if (access instanceof Response) return access;
   const body = await c.req.text();
   const resp = await hubStub(c.env, access.teamId, access.id).fetch(
@@ -412,10 +448,27 @@ nb.post("/api/nextbridge/instances/:id/chat/send", requireAuth, async (c) => {
   } catch {
     return c.json({ error: "invalid JSON" }, 400);
   }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    (body.text !== undefined && typeof body.text !== "string")
+  ) {
+    return c.json({ error: "invalid chat payload" }, 400);
+  }
   const text = (body.text ?? "").trim();
   if (!text) return c.json({ error: "text is required" }, 400);
-  if (!body.channel || typeof body.channel !== "object") {
+  if (text.length > MAX_CHAT_TEXT_LENGTH) {
+    return c.json(
+      { error: `text must be at most ${MAX_CHAT_TEXT_LENGTH} characters` },
+      400,
+    );
+  }
+  if (!body.channel || typeof body.channel !== "object" || Array.isArray(body.channel)) {
     return c.json({ error: "channel must be an object" }, 400);
+  }
+  if (JSON.stringify(body.channel).length > MAX_CHANNEL_JSON_LENGTH) {
+    return c.json({ error: "channel address is too large" }, 400);
   }
 
   // Identify the Workbench user to the NextBridge side. We pass username +
@@ -490,7 +543,9 @@ nb.get("/api/nextbridge/relay", async (c) => {
   const m = authz.match(/^Bearer\s+(.+)$/i);
   if (!m) return c.json({ error: "missing bearer token" }, 401);
   const token = m[1].trim();
-  if (!token) return c.json({ error: "missing bearer token" }, 401);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return c.json({ error: "invalid token" }, 401);
+  }
 
   const tokenHash = await hashToken(token);
   const lookup = await c.env.KV.get<{ teamId: string; instanceId: string }>(

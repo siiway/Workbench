@@ -17,8 +17,24 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : String(err);
+  if (
+    err instanceof SyntaxError &&
+    c.req.header("Content-Type")?.toLowerCase().includes("application/json")
+  ) {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
   console.error("Unhandled worker error:", message, err instanceof Error ? err.stack : undefined);
   return c.json({ error: "Internal server error" }, 500);
+});
+
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "no-referrer");
+  c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (c.req.path.startsWith("/api/auth/")) {
+    c.header("Cache-Control", "no-store");
+  }
 });
 
 // Global body-size cap on every API endpoint. 64 KB covers the realistic
