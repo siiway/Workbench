@@ -221,14 +221,12 @@ export function KeybindProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useKeybinds(): KeybindApi {
   const ctx = useContext(KeybindContext);
   if (!ctx) throw new Error("useKeybinds must be used within KeybindProvider");
   return ctx;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useKeybindHandler(id: ActionId, handler: () => void) {
   const { _register } = useKeybinds();
   const ref = useRef(handler);

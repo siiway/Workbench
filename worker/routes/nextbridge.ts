@@ -106,12 +106,12 @@ function pairKey(code: string): string {
 
 async function listInstances(kv: KVNamespace, teamId: string): Promise<NbInstance[]> {
   const ids = (await kv.get<string[]>(listKey(teamId), "json")) ?? [];
-  const result: NbInstance[] = [];
-  for (const id of ids) {
-    const inst = await kv.get<NbInstance>(instanceKey(teamId, id), "json");
-    if (inst) result.push(inst);
-  }
-  return result;
+  if (ids.length === 0) return [];
+  const keys = ids.map((id) => instanceKey(teamId, id));
+  const records = await kv.get<NbInstance>(keys, "json");
+  return keys
+    .map((key) => records.get(key))
+    .filter((instance): instance is NbInstance => instance !== null && instance !== undefined);
 }
 
 async function saveInstance(kv: KVNamespace, inst: NbInstance): Promise<void> {

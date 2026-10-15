@@ -681,7 +681,7 @@ export function AppsPage({ teamId }: Props) {
           <div
             className={mergeClasses(
               styles.cardActions,
-              (fav || true) && styles.cardActionsAlways,
+              styles.cardActionsAlways,
             )}
             onClick={(e) => e.stopPropagation()}
           >

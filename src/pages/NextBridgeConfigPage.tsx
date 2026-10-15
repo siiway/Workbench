@@ -273,12 +273,41 @@ export function NextBridgeConfigPage({ teamId }: Props) {
     void refreshSelected();
   }, [refreshSelected]);
 
-  // Poll the live tail every 5 seconds while a connected instance is selected.
+  // Status and events are the only volatile diagnostics. Drivers and rules
+  // are refreshed on selection/manual refresh, avoiding two RPC round trips
+  // on every poll. Background tabs pause polling entirely.
+  const refreshLiveTail = useCallback(async () => {
+    if (!selected || document.hidden) return;
+    const base = `/api/nextbridge/instances/${encodeURIComponent(
+      selected,
+    )}?teamId=${encodeURIComponent(teamId)}`;
+    try {
+      const [statusR, eventsR] = await Promise.all([
+        fetch(`${base.replace("?", "/status?")}`),
+        fetch(`${base.replace("?", "/events?")}`),
+      ]);
+      if (statusR.ok) setStatus((await statusR.json()) as StatusResponse);
+      if (eventsR.ok) {
+        const body = (await eventsR.json()) as { events: EventEntry[] };
+        setEvents(body.events.slice().reverse());
+      }
+    } catch {
+      // Preserve the last successful diagnostics during transient failures.
+    }
+  }, [selected, teamId]);
+
   useEffect(() => {
     if (!selected || !status?.connected) return;
-    const id = setInterval(() => void refreshSelected(), 5000);
-    return () => clearInterval(id);
-  }, [selected, status?.connected, refreshSelected]);
+    const onVisible = () => {
+      if (!document.hidden) void refreshLiveTail();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const id = setInterval(() => void refreshLiveTail(), 10_000);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [selected, status?.connected, refreshLiveTail]);
 
   const canManage = list?.can_manage ?? false;
 

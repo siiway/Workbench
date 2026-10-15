@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import {
   FluentProvider,
@@ -16,15 +16,6 @@ import { AuthProvider, useAuth } from "./auth";
 import { I18nProvider, useI18n } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
-import { DashboardPage } from "./pages/DashboardPage";
-import { TasksPage } from "./pages/TasksPage";
-import { TeamsPage } from "./pages/TeamsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { PermissionsPage } from "./pages/PermissionsPage";
-import { AppsPage } from "./pages/AppsPage";
-import { ConsolePage } from "./pages/ConsolePage";
-import { NextBridgePage } from "./pages/NextBridgePage";
-import { NextBridgeConfigPage } from "./pages/NextBridgeConfigPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { InitPage } from "./pages/InitPage";
@@ -40,6 +31,36 @@ import { patchTheme } from "./theme";
 import type { TeamInfo } from "./types";
 
 const ACTIVE_TEAM_KEY = "workbench:activeTeamId";
+
+const DashboardPage = lazy(() =>
+  import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })),
+);
+const TasksPage = lazy(() =>
+  import("./pages/TasksPage").then((module) => ({ default: module.TasksPage })),
+);
+const TeamsPage = lazy(() =>
+  import("./pages/TeamsPage").then((module) => ({ default: module.TeamsPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
+);
+const PermissionsPage = lazy(() =>
+  import("./pages/PermissionsPage").then((module) => ({ default: module.PermissionsPage })),
+);
+const AppsPage = lazy(() =>
+  import("./pages/AppsPage").then((module) => ({ default: module.AppsPage })),
+);
+const ConsolePage = lazy(() =>
+  import("./pages/ConsolePage").then((module) => ({ default: module.ConsolePage })),
+);
+const NextBridgePage = lazy(() =>
+  import("./pages/NextBridgePage").then((module) => ({ default: module.NextBridgePage })),
+);
+const NextBridgeConfigPage = lazy(() =>
+  import("./pages/NextBridgeConfigPage").then((module) => ({
+    default: module.NextBridgeConfigPage,
+  })),
+);
 
 const useStyles = makeStyles({
   shell: {
@@ -128,7 +149,7 @@ function AppShell() {
     if (!activeTeamId || !teams.some((t) => t.id === activeTeamId)) {
       setActiveTeamId(teams[0].id);
     }
-  }, [user, activeTeamId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, activeTeamId]);
 
   if (loading || configured === null) {
     return (
@@ -172,6 +193,13 @@ function AppShell() {
           </MessageBar>
         )}
         <div className={styles.content}>
+          <Suspense
+            fallback={
+              <div className={styles.center}>
+                <Spinner size="large" label={t.loading} />
+              </div>
+            }
+          >
           <Routes>
             <Route
               path="/"
@@ -256,6 +284,7 @@ function AppShell() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </div>
       </div>
       {currentTeam && <ConsoleDrawer teamId={currentTeam} />}

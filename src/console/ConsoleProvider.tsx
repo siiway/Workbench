@@ -249,7 +249,6 @@ export function ConsoleProvider({ children, registry }: Props) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useConsole(): ConsoleApi {
   const ctx = useContext(ConsoleContext);
   if (!ctx) throw new Error("useConsole must be used within ConsoleProvider");

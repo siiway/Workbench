@@ -199,7 +199,7 @@ export function DashboardPage({ teamId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [teamId]);
+  }, [teamId, t.glintNotConfigured, t.glintPrismIntrospectionDetail]);
 
   useEffect(() => { void load(); }, [load]);
 

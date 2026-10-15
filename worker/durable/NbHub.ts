@@ -14,6 +14,7 @@
  * Events from NextBridge are stored in a small ring buffer so the UI can
  * fetch the recent tail without subscribing to a stream.
  */
+import { DurableObject } from "cloudflare:workers";
 import type { Bindings } from "../types";
 
 type Frame =
@@ -162,9 +163,8 @@ type PendingRpc = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-export class NbHub {
+export class NbHub extends DurableObject<Bindings> {
   private state: DurableObjectState;
-  private env: Bindings;
   private pending: Map<string, PendingRpc> = new Map();
   private events: EventEntry[] = [];
   private chatMessages: ChatMessage[] = [];
@@ -183,9 +183,8 @@ export class NbHub {
   } = {};
 
   constructor(state: DurableObjectState, env: Bindings) {
+    super(state, env);
     this.state = state;
-    this.env = env;
-    void this.env; // currently unused but kept for future per-DO config lookups
     // Restore events + chat buffers + group names from storage on cold start.
     this.state.blockConcurrencyWhile(async () => {
       const stored = (await this.state.storage.get<EventEntry[]>("events")) ?? [];

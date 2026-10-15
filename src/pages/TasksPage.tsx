@@ -332,7 +332,10 @@ export function TasksPage({ teamId }: Props) {
 
   const permsState = usePermissions(teamId, activeSetId);
   const perms = permsState.data;
-  const can = (key: string) => perms?.permissions?.[key as never] ?? false;
+  const can = useCallback(
+    (key: string) => perms?.permissions?.[key as never] ?? false,
+    [perms],
+  );
 
   const loadSets = useCallback(async () => {
     setSetsLoading(true);
@@ -783,7 +786,7 @@ export function TasksPage({ teamId }: Props) {
   const canDeleteCmt = useCallback(
     (c: Comment) =>
       c.userId === myId ? can("delete_own_comments") : can("delete_any_comment"),
-    [myId, perms, can],
+    [myId, can],
   );
 
   // ── row render ───────────────────────────────────────────────────────────
